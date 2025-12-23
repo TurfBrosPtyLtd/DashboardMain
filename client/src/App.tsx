@@ -11,7 +11,6 @@ import Feedback from "@/pages/Feedback";
 import MapPage from "@/pages/Map";
 import Staff from "@/pages/Staff";
 import JobDetails from "@/pages/JobDetails";
-import { AuthGuard } from "@/components/AuthGuard";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -34,9 +33,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <AuthGuard>
-          <Router />
-        </AuthGuard>
+        <Router />
       </TooltipProvider>
     </QueryClientProvider>
   );
