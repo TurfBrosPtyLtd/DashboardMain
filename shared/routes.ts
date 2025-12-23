@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { insertUserSchema, insertClientSchema, insertJobSchema, insertFeedbackSchema, insertApplicationSchema, users, clients, jobs, feedback, applications } from './schema';
+import { insertStaffSchema, insertClientSchema, insertJobSchema, insertFeedbackSchema, insertApplicationSchema, staff, clients, jobs, feedback, applications } from './schema';
 
 export const errorSchemas = {
   validation: z.object({
@@ -15,29 +15,28 @@ export const errorSchemas = {
 };
 
 export const api = {
-  users: {
+  staff: {
     list: {
       method: 'GET' as const,
-      path: '/api/users',
+      path: '/api/staff',
       responses: {
-        200: z.array(z.custom<typeof users.$inferSelect>()),
+        200: z.array(z.custom<typeof staff.$inferSelect>()),
       },
     },
     get: {
       method: 'GET' as const,
-      path: '/api/users/:id',
+      path: '/api/staff/:id',
       responses: {
-        200: z.custom<typeof users.$inferSelect>(),
+        200: z.custom<typeof staff.$inferSelect>(),
         404: errorSchemas.notFound,
       },
     },
-    // We'll rely on Replit Auth for creation mostly, or manual admin creation
     create: {
       method: 'POST' as const,
-      path: '/api/users',
-      input: insertUserSchema,
+      path: '/api/staff',
+      input: insertStaffSchema,
       responses: {
-        201: z.custom<typeof users.$inferSelect>(),
+        201: z.custom<typeof staff.$inferSelect>(),
         400: errorSchemas.validation,
       },
     },

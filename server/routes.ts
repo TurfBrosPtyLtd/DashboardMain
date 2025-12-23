@@ -4,49 +4,40 @@ import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import OpenAI from "openai";
-import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
-import { registerChatRoutes } from "./replit_integrations/chat";
-import { registerImageRoutes } from "./replit_integrations/image";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "dummy" });
+const openai = new OpenAI({ apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || "dummy" });
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
   
-  // Setup Integrations
-  await setupAuth(app);
-  registerAuthRoutes(app);
-  registerChatRoutes(app);
-  registerImageRoutes(app);
-
-  // Users
-  app.get(api.users.list.path, async (req, res) => {
-    const users = await storage.getUsers();
-    res.json(users);
+  // Staff
+  app.get(api.staff.list.path, async (req, res) => {
+    const staffList = await storage.getStaffList();
+    res.json(staffList);
   });
   
-  app.post(api.users.create.path, async (req, res) => {
+  app.post(api.staff.create.path, async (req, res) => {
     try {
-      const input = api.users.create.input.parse(req.body);
-      const user = await storage.createUser(input);
-      res.status(201).json(user);
+      const input = api.staff.create.input.parse(req.body);
+      const s = await storage.createStaff(input);
+      res.status(201).json(s);
     } catch (err) {
       res.status(400).json({ message: "Invalid input" });
     }
   });
 
-  app.get(api.users.get.path, async (req, res) => {
-    const user = await storage.getUser(Number(req.params.id));
-    if (!user) return res.status(404).json({ message: "User not found" });
-    res.json(user);
+  app.get(api.staff.get.path, async (req, res) => {
+    const s = await storage.getStaff(Number(req.params.id));
+    if (!s) return res.status(404).json({ message: "Staff not found" });
+    res.json(s);
   });
 
   // Clients
   app.get(api.clients.list.path, async (req, res) => {
-    const clients = await storage.getClients();
-    res.json(clients);
+    const clientList = await storage.getClients();
+    res.json(clientList);
   });
 
   app.post(api.clients.create.path, async (req, res) => {
@@ -71,8 +62,8 @@ export async function registerRoutes(
       assignedToId: req.query.assignedToId ? Number(req.query.assignedToId) : undefined,
       status: req.query.status as string,
     };
-    const jobs = await storage.getJobs(filters);
-    res.json(jobs);
+    const jobsList = await storage.getJobs(filters);
+    res.json(jobsList);
   });
 
   app.post(api.jobs.create.path, async (req, res) => {
@@ -106,7 +97,6 @@ export async function registerRoutes(
     try {
       const input = api.feedback.create.input.parse(req.body);
       
-      // Perform AI Analysis
       let aiAnalysis = "Analysis pending...";
       let sentiment = "neutral";
       
@@ -129,12 +119,12 @@ export async function registerRoutes(
         }
       }
 
-      const feedback = await storage.createFeedback({
+      const feedbackData = await storage.createFeedback({
         ...input,
         sentiment,
         aiAnalysis,
       });
-      res.status(201).json(feedback);
+      res.status(201).json(feedbackData);
     } catch (err) {
       console.error(err);
       res.status(400).json({ message: "Invalid input" });
@@ -142,8 +132,8 @@ export async function registerRoutes(
   });
 
   app.get(api.feedback.list.path, async (req, res) => {
-    const feedback = await storage.getFeedback();
-    res.json(feedback);
+    const feedbackList = await storage.getFeedback();
+    res.json(feedbackList);
   });
 
   // Applications
@@ -159,11 +149,10 @@ export async function registerRoutes(
 
   // Seed Data
   try {
-    const users = await storage.getUsers();
-    if (users.length === 0) {
+    const staffList = await storage.getStaffList();
+    if (staffList.length === 0) {
       console.log("Seeding database...");
-      const admin = await storage.createUser({ username: "admin", role: "admin" });
-      const staff1 = await storage.createUser({ username: "staff1", role: "staff" });
+      const staff1 = await storage.createStaff({ name: "John Mower", role: "staff", phone: "555-1234" });
       
       const client1 = await storage.createClient({ 
         name: "John Doe", 

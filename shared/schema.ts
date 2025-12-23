@@ -1,17 +1,22 @@
-import { pgTable, text, serial, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 
 // Export Auth and Chat models from integrations
 export * from "./models/auth";
 export * from "./models/chat";
 
-export const users = pgTable("users", {
+// Staff members (linked to auth users via email/id)
+export const staff = pgTable("staff", {
   id: serial("id").primaryKey(),
-  username: text("username").notNull().unique(),
-  role: text("role").default("staff").notNull(), // 'admin', 'staff', 'client'
-  createdAt: timestamp("created_at").defaultNow(),
+  userId: varchar("user_id").references(() => {
+    // Reference to auth users table
+    return pgTable("users", { id: varchar("id").primaryKey() }).id;
+  }),
+  name: text("name").notNull(),
+  phone: text("phone"),
+  role: text("role").default("staff").notNull(), // 'admin', 'staff'
 });
 
 export const clients = pgTable("clients", {
@@ -28,7 +33,7 @@ export const clients = pgTable("clients", {
 export const jobs = pgTable("jobs", {
   id: serial("id").primaryKey(),
   clientId: integer("client_id").references(() => clients.id).notNull(),
-  assignedToId: integer("assigned_to_id").references(() => users.id),
+  assignedToId: integer("assigned_to_id").references(() => staff.id),
   scheduledDate: timestamp("scheduled_date").notNull(),
   status: text("status").default("scheduled").notNull(), // 'scheduled', 'in_progress', 'completed', 'cancelled'
   startTime: timestamp("start_time"),
@@ -59,14 +64,18 @@ export const clientsRelations = relations(clients, ({ many }) => ({
   jobs: many(jobs),
 }));
 
+export const staffRelations = relations(staff, ({ many }) => ({
+  jobs: many(jobs),
+}));
+
 export const jobsRelations = relations(jobs, ({ one, many }) => ({
   client: one(clients, {
     fields: [jobs.clientId],
     references: [clients.id],
   }),
-  assignedTo: one(users, {
+  assignedTo: one(staff, {
     fields: [jobs.assignedToId],
-    references: [users.id],
+    references: [staff.id],
   }),
   feedback: many(feedback),
   applications: many(applications),
@@ -87,15 +96,15 @@ export const applicationsRelations = relations(applications, ({ one }) => ({
 }));
 
 // Schemas
-export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
+export const insertStaffSchema = createInsertSchema(staff).omit({ id: true });
 export const insertClientSchema = createInsertSchema(clients).omit({ id: true });
 export const insertJobSchema = createInsertSchema(jobs).omit({ id: true });
 export const insertFeedbackSchema = createInsertSchema(feedback).omit({ id: true, createdAt: true, sentiment: true, aiAnalysis: true });
 export const insertApplicationSchema = createInsertSchema(applications).omit({ id: true });
 
 // Types
-export type User = typeof users.$inferSelect;
-export type InsertUser = z.infer<typeof insertUserSchema>;
+export type Staff = typeof staff.$inferSelect;
+export type InsertStaff = z.infer<typeof insertStaffSchema>;
 export type Client = typeof clients.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
 export type Feedback = typeof feedback.$inferSelect;

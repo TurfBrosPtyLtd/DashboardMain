@@ -1,24 +1,22 @@
 import { db } from "./db";
 import {
-  users, clients, jobs, feedback, applications,
-  type User, type InsertUser,
-  type Client, type InsertUser as InsertClient, // Fix type alias
+  staff, clients, jobs, feedback, applications,
+  type Staff, type InsertStaff,
+  type Client, type InsertStaff as InsertClient,
   type Job, type Feedback, type Application
 } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 
-// We need to properly export the types for storage
 export interface IStorage {
-  // Users
-  getUser(id: number): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
-  getUsers(): Promise<User[]>;
+  // Staff
+  getStaff(id: number): Promise<Staff | undefined>;
+  getStaffList(): Promise<Staff[]>;
+  createStaff(staffData: any): Promise<Staff>;
 
   // Clients
   getClients(): Promise<Client[]>;
   getClient(id: number): Promise<Client | undefined>;
-  createClient(client: any): Promise<Client>; // Using any for simplicity in fast mode, ideally strictly typed
+  createClient(client: any): Promise<Client>;
 
   // Jobs
   getJobs(filters?: { assignedToId?: number; status?: string; date?: string }): Promise<(Job & { client: Client })[]>;
@@ -35,23 +33,18 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  async getUser(id: number): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+  async getStaff(id: number): Promise<Staff | undefined> {
+    const [s] = await db.select().from(staff).where(eq(staff.id, id));
+    return s;
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user;
+  async getStaffList(): Promise<Staff[]> {
+    return await db.select().from(staff);
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
-    return user;
-  }
-
-  async getUsers(): Promise<User[]> {
-    return await db.select().from(users);
+  async createStaff(staffData: any): Promise<Staff> {
+    const [newStaff] = await db.insert(staff).values(staffData).returning();
+    return newStaff;
   }
 
   async getClients(): Promise<Client[]> {
@@ -69,24 +62,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getJobs(filters?: { assignedToId?: number; status?: string; date?: string }): Promise<(Job & { client: Client })[]> {
-    let query = db.query.jobs.findMany({
-      with: {
-        client: true,
-      },
-      orderBy: [desc(jobs.scheduledDate)],
-    });
-    
-    // Note: Drizzle query builder filters are better applied in a simpler way for MVP or using .select() with joins
-    // Switching to .select() for easier dynamic filtering in this basic setup
-    
-    // Actually, stick to simple query for now.
-    // If I use db.select().from(jobs)... I can join.
-    
     const conditions = [];
     if (filters?.assignedToId) conditions.push(eq(jobs.assignedToId, filters.assignedToId));
     if (filters?.status) conditions.push(eq(jobs.status, filters.status));
-    
-    // Date filtering would require date manipulation, skipping for super-MVP 1-shot unless simple
     
     return await db.query.jobs.findMany({
       where: conditions.length > 0 ? and(...conditions) : undefined,
