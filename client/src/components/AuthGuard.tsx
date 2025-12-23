@@ -1,5 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -14,13 +15,16 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (!user) {
     return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-background">
-          <h1 className="text-2xl font-bold mb-4">Welcome to Turf Bros Dashboard</h1>
-          <p className="mb-8 text-muted-foreground">Please log in to access the system.</p>
-          <a href="/api/login" className="bg-primary text-primary-foreground hover:bg-primary/90 px-6 py-3 rounded-md font-medium transition-colors">
-            Login with Replit
-          </a>
-        </div>
+      <div className="flex flex-col items-center justify-center min-h-screen bg-background">
+        <h1 className="text-2xl font-bold mb-4">Welcome to Turf Bros Dashboard</h1>
+        <p className="mb-8 text-muted-foreground">Please log in to access the system.</p>
+        <Button 
+          onClick={() => { window.location.href = "/api/login"; }}
+          className="px-6 py-3"
+        >
+          Login with Replit
+        </Button>
+      </div>
     );
   }
 
