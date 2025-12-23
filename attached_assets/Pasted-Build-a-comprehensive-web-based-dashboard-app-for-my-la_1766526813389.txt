@@ -1,0 +1,20 @@
+Build a comprehensive web-based dashboard app for my lawn mowing business, Turf Bros, using a no-code or low-code platform like Bubble or Adalo. The goal is to centralize operations, improve efficiency, and enhance client satisfaction by tracking key metrics and enabling flexible scheduling. The app should support multiple user roles: admins (business owners), staff (mowers/gardeners), and optionally clients (for feedback submission).
+Core Features:
+
+Staff Performance Tracking: Monitor individual and team metrics such as jobs completed per day/week, average time per job, punctuality (via check-in/out timestamps), and efficiency scores. Include visualizations like charts or leaderboards, with options to filter by date or employee.
+Client Feedback Management: Allow clients to submit ratings and comments post-service via a simple form or integrated survey tool. Aggregate feedback into dashboards showing average scores, trends over time, and alerts for low ratings. Creatively, use AI to analyze text feedback for common themes (e.g., 'great communication' or 'needs improvement in edging').
+Job Runs and Scheduling: Support single or multiple job runs per client. Enable flexible booking structures for our programs: 22 services (bi-weekly standard), 24 services (enhanced seasonal), or 26 services (premium year-round). Include a calendar view for assigning jobs, with drag-and-drop rescheduling and automated reminders via email/SMS.
+Route Optimization: Integrate with mapping APIs (e.g., Google Maps) to optimize daily routes based on job locations, traffic, and staff availability. Allow manual overrides for flexibility, and suggest predictive adjustments (e.g., rerouting for weather forecasts via an optional API integration).
+
+Tracking Applications and Add-Ons: Log and track ancillary services like soil wetting, fertilizing, aerating, or pest control. For each job, include fields to record products used, quantities, dates applied, and compliance notes (e.g., eco-friendly certifications). Generate reports on application history per client or property.
+
+Overall Flexibility: The system must handle irregular bookings, cancellations, or one-off jobs without disrupting programs. Use a modular database structure (e.g., clients linked to properties, services, and staff) to allow easy expansion, such as adding new program tiers.
+
+Additional Requirements:
+
+Mobile-responsive design for staff in the field.
+Data security: Role-based access and GDPR-compliant storage.
+Integrations: Connect to payment gateways (e.g., Stripe for direct debits), calendar apps (e.g., Google Calendar), and optionally weather APIs for proactive scheduling.
+Reporting: Exportable reports on revenue, service completion rates, and inventory for applications.
+
+Provide a high-level app structure, including database schema, key screens/wireframes, and any code snippets if needed. Suggest innovative features like AI-powered predictive maintenance alerts (e.g., 'This lawn may need fertilizing soon based on past data') to make the app stand out, while keeping it practical and user-friendly.
