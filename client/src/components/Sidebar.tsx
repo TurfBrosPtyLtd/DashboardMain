@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Calendar, Users, Star, Map as MapIcon, Leaf, LogOut } from "lucide-react";
+import { LayoutDashboard, Calendar, Users, Star, Map as MapIcon, Leaf, LogOut, Settings } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { icon: Users, label: "Clients", href: "/clients" },
   { icon: Star, label: "Feedback", href: "/feedback" },
   { icon: MapIcon, label: "Route Map", href: "/map" },
+  { icon: Settings, label: "Settings", href: "/settings" },
 ];
 
 export function Sidebar() {

@@ -11,6 +11,7 @@ import Feedback from "@/pages/Feedback";
 import MapPage from "@/pages/Map";
 import Staff from "@/pages/Staff";
 import JobDetails from "@/pages/JobDetails";
+import Settings from "@/pages/Settings";
 import { AuthGuard } from "@/components/AuthGuard";
 import NotFound from "@/pages/not-found";
 
@@ -24,6 +25,7 @@ function Router() {
       <Route path="/feedback" component={Feedback} />
       <Route path="/map" component={MapPage} />
       <Route path="/staff" component={Staff} />
+      <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -51,6 +51,22 @@ export async function registerRoutes(
     res.json(s);
   });
 
+  app.put("/api/staff/:id", async (req, res) => {
+    try {
+      const role = await getCurrentUserRole(req);
+      if (role !== "manager" && role !== "owner") {
+        return res.status(403).json({ message: "Only managers and owners can update staff roles" });
+      }
+      const staffId = Number(req.params.id);
+      const { role: newRole } = req.body;
+      const updated = await storage.updateStaff(staffId, { role: newRole });
+      if (!updated) return res.status(404).json({ message: "Staff not found" });
+      res.json(updated);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
   // Clients
   app.get(api.clients.list.path, async (req, res) => {
     const clientList = await storage.getClients();
