@@ -95,6 +95,27 @@ export default function Jobs() {
     return crews?.find((c: Crew) => c.id === crewId)?.name;
   };
 
+  const getDayTotal = (date: Date) => {
+    const dayJobs = getJobsForDate(date);
+    return dayJobs.reduce((sum, job) => sum + (job.price || 0), 0);
+  };
+
+  const getWeekTotal = (startDate: Date) => {
+    let total = 0;
+    for (let i = 0; i < 7; i++) {
+      total += getDayTotal(addDays(startDate, i));
+    }
+    return total;
+  };
+
+  const getMonthTotal = () => {
+    return days.reduce((sum, day) => sum + getDayTotal(day), 0);
+  };
+
+  const formatCurrency = (amount: number) => {
+    return `$${amount.toLocaleString()}`;
+  };
+
   const handleOpenAddJobRun = (date: Date) => {
     setAddJobRunDate(date);
     setSelectedCrewId("");
@@ -346,9 +367,19 @@ export default function Jobs() {
                   ))
                 ) : null}
               </div>
+              {getDayTotal(day) > 0 && (
+                <div className="mt-1 pt-1 border-t border-border/50 text-xs font-semibold text-green-600 dark:text-green-400" data-testid={`day-total-${format(day, "yyyy-MM-dd")}`}>
+                  {formatCurrency(getDayTotal(day))}
+                </div>
+              )}
             </div>
           );
         })}
+      </div>
+      <div className="flex justify-end p-3 bg-muted rounded-lg">
+        <div className="text-lg font-bold text-green-600 dark:text-green-400" data-testid="month-total">
+          Monthly Total: {formatCurrency(getMonthTotal())}
+        </div>
       </div>
     </div>
   );
@@ -427,9 +458,19 @@ export default function Jobs() {
                   ))
                 )}
               </div>
+              {getDayTotal(day) > 0 && (
+                <div className="mt-2 pt-2 border-t border-border/50 text-sm font-semibold text-green-600 dark:text-green-400" data-testid={`week-day-total-${format(day, "yyyy-MM-dd")}`}>
+                  {formatCurrency(getDayTotal(day))}
+                </div>
+              )}
             </div>
           );
         })}
+      </div>
+      <div className="flex justify-end p-3 bg-muted rounded-lg">
+        <div className="text-lg font-bold text-green-600 dark:text-green-400" data-testid="week-total">
+          Weekly Total: {formatCurrency(getWeekTotal(days[0]))}
+        </div>
       </div>
     </div>
   );
@@ -491,6 +532,13 @@ export default function Jobs() {
                     </div>
                   </Link>
                 ))}
+              </div>
+            )}
+            {getDayTotal(day) > 0 && (
+              <div className="mt-4 pt-3 border-t border-border flex justify-end">
+                <div className="text-lg font-bold text-green-600 dark:text-green-400" data-testid={`daily-total-${format(day, "yyyy-MM-dd")}`}>
+                  Day Total: {formatCurrency(getDayTotal(day))}
+                </div>
               </div>
             )}
           </div>
