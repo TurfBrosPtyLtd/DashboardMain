@@ -1,10 +1,26 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
-import { insertJobRunSchema, insertCrewSchema, updateCrewSchema } from "@shared/schema";
+import { insertJobRunSchema, insertCrewSchema, updateCrewSchema, canViewMoney } from "@shared/schema";
 import { z } from "zod";
 import OpenAI from "openai";
+
+// Helper to get current user's staff role
+async function getCurrentUserRole(req: Request): Promise<string | null> {
+  const userId = (req as any).user?.claims?.sub;
+  if (!userId) return null;
+  const staffMember = await storage.getStaffByUserId(userId);
+  return staffMember?.role || null;
+}
+
+// Helper to sanitize job data (remove price for unauthorized users)
+function sanitizeJobData<T extends { price?: number | null }>(job: T, canView: boolean): T {
+  if (!canView) {
+    return { ...job, price: null };
+  }
+  return job;
+}
 
 const openai = new OpenAI({ apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || "dummy" });
 
@@ -173,19 +189,27 @@ export async function registerRoutes(
 
   // Jobs
   app.get(api.jobs.list.path, async (req, res) => {
+    const role = await getCurrentUserRole(req);
+    const canView = canViewMoney(role);
     const filters = {
       assignedToId: req.query.assignedToId ? Number(req.query.assignedToId) : undefined,
       status: req.query.status as string,
     };
     const jobsList = await storage.getJobs(filters);
-    res.json(jobsList);
+    res.json(jobsList.map(job => sanitizeJobData(job, canView)));
   });
 
   app.post(api.jobs.create.path, async (req, res) => {
     try {
-      const input = api.jobs.create.input.parse(req.body);
+      const role = await getCurrentUserRole(req);
+      const canView = canViewMoney(role);
+      let input = api.jobs.create.input.parse(req.body);
+      // Strip price if user doesn't have permission
+      if (!canView) {
+        input = { ...input, price: 0 };
+      }
       const job = await storage.createJob(input);
-      res.status(201).json(job);
+      res.status(201).json(sanitizeJobData(job, canView));
     } catch (err) {
       res.status(400).json({ message: "Invalid input" });
     }
@@ -193,18 +217,26 @@ export async function registerRoutes(
 
   app.put(api.jobs.update.path, async (req, res) => {
     try {
-      const input = api.jobs.update.input.parse(req.body);
+      const role = await getCurrentUserRole(req);
+      const canView = canViewMoney(role);
+      let input = api.jobs.update.input.parse(req.body);
+      // Strip price if user doesn't have permission
+      if (!canView) {
+        delete input.price;
+      }
       const job = await storage.updateJob(Number(req.params.id), input);
-      res.json(job);
+      res.json(sanitizeJobData(job, canView));
     } catch (err) {
       res.status(400).json({ message: "Invalid input" });
     }
   });
 
   app.get(api.jobs.get.path, async (req, res) => {
+    const role = await getCurrentUserRole(req);
+    const canView = canViewMoney(role);
     const job = await storage.getJob(Number(req.params.id));
     if (!job) return res.status(404).json({ message: "Job not found" });
-    res.json(job);
+    res.json(sanitizeJobData(job, canView));
   });
 
   // Feedback with AI Analysis

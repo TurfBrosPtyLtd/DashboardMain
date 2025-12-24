@@ -13,6 +13,7 @@ import { eq, and, desc, gte, lt } from "drizzle-orm";
 export interface IStorage {
   // Staff
   getStaff(id: number): Promise<Staff | undefined>;
+  getStaffByUserId(userId: string): Promise<Staff | undefined>;
   getStaffList(): Promise<Staff[]>;
   createStaff(staffData: any): Promise<Staff>;
 
@@ -52,6 +53,11 @@ export interface IStorage {
 export class DatabaseStorage implements IStorage {
   async getStaff(id: number): Promise<Staff | undefined> {
     const [s] = await db.select().from(staff).where(eq(staff.id, id));
+    return s;
+  }
+
+  async getStaffByUserId(userId: string): Promise<Staff | undefined> {
+    const [s] = await db.select().from(staff).where(eq(staff.userId, userId));
     return s;
   }
 
