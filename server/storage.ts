@@ -1,9 +1,9 @@
 import { db } from "./db";
 import {
-  staff, clients, crews, jobs, feedback, applications,
+  staff, clients, jobRuns, jobs, feedback, applications,
   type Staff, type InsertStaff,
   type Client, type InsertStaff as InsertClient,
-  type Crew, type InsertCrew,
+  type JobRun, type InsertJobRun,
   type Job, type Feedback, type Application
 } from "@shared/schema";
 import { eq, and, desc, gte, lt } from "drizzle-orm";
@@ -19,9 +19,11 @@ export interface IStorage {
   getClient(id: number): Promise<Client | undefined>;
   createClient(client: any): Promise<Client>;
 
-  // Crews
-  getCrews(date?: string): Promise<Crew[]>;
-  createCrew(crew: any): Promise<Crew>;
+  // Job Runs
+  getJobRuns(date?: string): Promise<JobRun[]>;
+  createJobRun(jobRun: any): Promise<JobRun>;
+  updateJobRun(id: number, updates: any): Promise<JobRun>;
+  deleteJobRun(id: number): Promise<boolean>;
 
   // Jobs
   getJobs(filters?: { assignedToId?: number; status?: string; date?: string }): Promise<(Job & { client: Client })[]>;
@@ -66,22 +68,33 @@ export class DatabaseStorage implements IStorage {
     return newClient;
   }
 
-  async getCrews(date?: string): Promise<Crew[]> {
+  async getJobRuns(date?: string): Promise<JobRun[]> {
     if (date) {
       const start = new Date(date);
       start.setHours(0, 0, 0, 0);
       const end = new Date(date);
       end.setHours(23, 59, 59, 999);
-      return await db.select().from(crews)
-        .where(and(gte(crews.date, start), lt(crews.date, end)))
-        .orderBy(crews.createdAt);
+      return await db.select().from(jobRuns)
+        .where(and(gte(jobRuns.date, start), lt(jobRuns.date, end)))
+        .orderBy(jobRuns.createdAt);
     }
-    return await db.select().from(crews).orderBy(desc(crews.date));
+    return await db.select().from(jobRuns).orderBy(desc(jobRuns.date));
   }
 
-  async createCrew(crew: any): Promise<Crew> {
-    const [newCrew] = await db.insert(crews).values(crew).returning();
-    return newCrew;
+  async createJobRun(jobRun: any): Promise<JobRun> {
+    const [newJobRun] = await db.insert(jobRuns).values(jobRun).returning();
+    return newJobRun;
+  }
+
+  async updateJobRun(id: number, updates: any): Promise<JobRun> {
+    const [updated] = await db.update(jobRuns).set(updates).where(eq(jobRuns.id, id)).returning();
+    return updated;
+  }
+
+  async deleteJobRun(id: number): Promise<boolean> {
+    await db.update(jobs).set({ jobRunId: null }).where(eq(jobs.jobRunId, id));
+    await db.delete(jobRuns).where(eq(jobRuns.id, id));
+    return true;
   }
 
   async getJobs(filters?: { assignedToId?: number; status?: string; date?: string }): Promise<(Job & { client: Client })[]> {

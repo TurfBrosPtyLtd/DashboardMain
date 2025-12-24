@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { insertStaffSchema, insertClientSchema, insertCrewSchema, insertJobSchema, insertFeedbackSchema, insertApplicationSchema, staff, clients, crews, jobs, feedback, applications } from './schema';
+import { insertStaffSchema, insertClientSchema, insertJobRunSchema, insertJobSchema, insertFeedbackSchema, insertApplicationSchema, staff, clients, jobRuns, jobs, feedback, applications } from './schema';
 
 export const errorSchemas = {
   validation: z.object({
@@ -67,24 +67,42 @@ export const api = {
       },
     },
   },
-  crews: {
+  jobRuns: {
     list: {
       method: 'GET' as const,
-      path: '/api/crews',
+      path: '/api/job-runs',
       input: z.object({
         date: z.string().optional(),
       }).optional(),
       responses: {
-        200: z.array(z.custom<typeof crews.$inferSelect>()),
+        200: z.array(z.custom<typeof jobRuns.$inferSelect>()),
       },
     },
     create: {
       method: 'POST' as const,
-      path: '/api/crews',
-      input: insertCrewSchema,
+      path: '/api/job-runs',
+      input: insertJobRunSchema,
       responses: {
-        201: z.custom<typeof crews.$inferSelect>(),
+        201: z.custom<typeof jobRuns.$inferSelect>(),
         400: errorSchemas.validation,
+      },
+    },
+    update: {
+      method: 'PUT' as const,
+      path: '/api/job-runs/:id',
+      input: insertJobRunSchema.partial(),
+      responses: {
+        200: z.custom<typeof jobRuns.$inferSelect>(),
+        400: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/job-runs/:id',
+      responses: {
+        200: z.object({ success: z.boolean() }),
+        404: errorSchemas.notFound,
       },
     },
   },

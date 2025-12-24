@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
-import { insertCrewSchema } from "@shared/schema";
+import { insertJobRunSchema } from "@shared/schema";
 import { z } from "zod";
 import OpenAI from "openai";
 
@@ -57,20 +57,40 @@ export async function registerRoutes(
     res.json(client);
   });
 
-  // Crews
-  app.get(api.crews.list.path, async (req, res) => {
+  // Job Runs
+  app.get(api.jobRuns.list.path, async (req, res) => {
     const date = req.query.date as string;
-    const crewList = await storage.getCrews(date);
-    res.json(crewList);
+    const jobRunList = await storage.getJobRuns(date);
+    res.json(jobRunList);
   });
 
-  app.post(api.crews.create.path, async (req, res) => {
+  app.post(api.jobRuns.create.path, async (req, res) => {
     try {
-      const input = insertCrewSchema.parse(req.body);
-      const crew = await storage.createCrew(input);
-      res.status(201).json(crew);
+      const input = insertJobRunSchema.parse(req.body);
+      const jobRun = await storage.createJobRun(input);
+      res.status(201).json(jobRun);
     } catch (err) {
       res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  app.put(api.jobRuns.update.path, async (req, res) => {
+    try {
+      const input = insertJobRunSchema.partial().parse(req.body);
+      const jobRun = await storage.updateJobRun(Number(req.params.id), input);
+      if (!jobRun) return res.status(404).json({ message: "Job run not found" });
+      res.json(jobRun);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  app.delete(api.jobRuns.delete.path, async (req, res) => {
+    try {
+      await storage.deleteJobRun(Number(req.params.id));
+      res.json({ success: true });
+    } catch (err) {
+      res.status(404).json({ message: "Job run not found" });
     }
   });
 
