@@ -114,7 +114,7 @@ export const applicationsRelations = relations(applications, ({ one }) => ({
 // Schemas
 export const insertStaffSchema = createInsertSchema(staff).omit({ id: true });
 export const insertClientSchema = createInsertSchema(clients).omit({ id: true });
-export const insertCrewSchema = createInsertSchema(crews).omit({ id: true, createdAt: true });
+export const insertCrewSchema = createInsertSchema(crews).omit({ id: true, createdAt: true }).extend({ date: z.union([z.date(), z.string().pipe(z.coerce.date())]) });
 export const insertJobSchema = createInsertSchema(jobs).omit({ id: true });
 export const insertFeedbackSchema = createInsertSchema(feedback).omit({ id: true, createdAt: true, sentiment: true, aiAnalysis: true });
 export const insertApplicationSchema = createInsertSchema(applications).omit({ id: true });
