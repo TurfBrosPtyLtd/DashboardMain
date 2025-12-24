@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Layout } from "@/components/Layout";
 import { useJobs, useCreateJob, useUpdateJob } from "@/hooks/use-jobs";
 import { useClients } from "@/hooks/use-clients";
-import { useUsers } from "@/hooks/use-users";
+import { useStaff } from "@/hooks/use-users";
 import { format } from "date-fns";
 import { Calendar as CalendarIcon, MapPin, User, Clock, CheckCircle, Plus } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -16,7 +16,7 @@ export default function Jobs() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const { data: jobs, isLoading } = useJobs();
   const { data: clients } = useClients();
-  const { data: users } = useUsers();
+  const { data: staff } = useStaff();
   const createJob = useCreateJob();
   const updateJob = useUpdateJob();
 
@@ -84,8 +84,8 @@ export default function Jobs() {
                     <SelectValue placeholder="Select staff member" />
                   </SelectTrigger>
                   <SelectContent>
-                    {users?.map(user => (
-                      <SelectItem key={user.id} value={String(user.id)}>{user.username} ({user.role})</SelectItem>
+                    {staff?.map(member => (
+                      <SelectItem key={member.id} value={String(member.id)}>{member.name} ({member.role})</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
