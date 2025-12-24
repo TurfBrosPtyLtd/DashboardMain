@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@shared/routes";
+import { useAuth } from "./use-auth";
+import { canViewMoney } from "@shared/schema";
 
 export function useStaff() {
   return useQuery({
@@ -10,6 +12,20 @@ export function useStaff() {
       return api.staff.list.responses[200].parse(await res.json());
     },
   });
+}
+
+// Get current user's staff record by matching user ID
+export function useCurrentStaff() {
+  const { user } = useAuth();
+  const { data: staffList } = useStaff();
+  
+  const currentStaff = staffList?.find(s => s.userId === user?.id) || null;
+  
+  return {
+    staff: currentStaff,
+    role: currentStaff?.role || null,
+    canViewMoney: canViewMoney(currentStaff?.role),
+  };
 }
 
 // Keep this for backward compatibility if needed

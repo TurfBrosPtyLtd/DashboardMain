@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Layout } from "@/components/Layout";
 import { useJobs, useCreateJob, useUpdateJob } from "@/hooks/use-jobs";
 import { useClients } from "@/hooks/use-clients";
-import { useStaff } from "@/hooks/use-users";
+import { useStaff, useCurrentStaff } from "@/hooks/use-users";
 import { useJobRuns, useCreateJobRun, useUpdateJobRun, useDeleteJobRun } from "@/hooks/use-job-runs";
 import { useCrews, useCreateCrew, useUpdateCrew, useDeleteCrew, useAddCrewMember, useRemoveCrewMember, type CrewWithMembers } from "@/hooks/use-crews";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, addDays, isSameDay, isToday } from "date-fns";
@@ -42,6 +42,7 @@ export default function Jobs() {
   const { data: jobs, isLoading } = useJobs();
   const { data: clients } = useClients();
   const { data: staff } = useStaff();
+  const { canViewMoney } = useCurrentStaff();
   const { data: jobRuns, refetch: refetchJobRuns } = useJobRuns();
   const { data: crews, refetch: refetchCrews } = useCrews();
   const createJob = useCreateJob();
@@ -367,7 +368,7 @@ export default function Jobs() {
                   ))
                 ) : null}
               </div>
-              {getDayTotal(day) > 0 && (
+              {canViewMoney && getDayTotal(day) > 0 && (
                 <div className="mt-1 pt-1 border-t border-border/50 text-xs font-semibold text-green-600 dark:text-green-400" data-testid={`day-total-${format(day, "yyyy-MM-dd")}`}>
                   {formatCurrency(getDayTotal(day))}
                 </div>
@@ -376,11 +377,13 @@ export default function Jobs() {
           );
         })}
       </div>
-      <div className="flex justify-end p-3 bg-muted rounded-lg">
-        <div className="text-lg font-bold text-green-600 dark:text-green-400" data-testid="month-total">
-          Monthly Total: {formatCurrency(getMonthTotal())}
+      {canViewMoney && (
+        <div className="flex justify-end p-3 bg-muted rounded-lg">
+          <div className="text-lg font-bold text-green-600 dark:text-green-400" data-testid="month-total">
+            Monthly Total: {formatCurrency(getMonthTotal())}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 
@@ -458,7 +461,7 @@ export default function Jobs() {
                   ))
                 )}
               </div>
-              {getDayTotal(day) > 0 && (
+              {canViewMoney && getDayTotal(day) > 0 && (
                 <div className="mt-2 pt-2 border-t border-border/50 text-sm font-semibold text-green-600 dark:text-green-400" data-testid={`week-day-total-${format(day, "yyyy-MM-dd")}`}>
                   {formatCurrency(getDayTotal(day))}
                 </div>
@@ -467,11 +470,13 @@ export default function Jobs() {
           );
         })}
       </div>
-      <div className="flex justify-end p-3 bg-muted rounded-lg">
-        <div className="text-lg font-bold text-green-600 dark:text-green-400" data-testid="week-total">
-          Weekly Total: {formatCurrency(getWeekTotal(days[0]))}
+      {canViewMoney && (
+        <div className="flex justify-end p-3 bg-muted rounded-lg">
+          <div className="text-lg font-bold text-green-600 dark:text-green-400" data-testid="week-total">
+            Weekly Total: {formatCurrency(getWeekTotal(days[0]))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 
@@ -528,9 +533,9 @@ export default function Jobs() {
                           <MapPin className="w-4 h-4 mr-2" />
                           {job.client.address}
                         </div>
-                        {job.price > 0 && (
+                        {canViewMoney && (job.price ?? 0) > 0 && (
                           <div className="flex items-center font-semibold text-green-600 dark:text-green-400">
-                            {formatCurrency(job.price)}
+                            {formatCurrency(job.price ?? 0)}
                           </div>
                         )}
                       </div>
@@ -539,7 +544,7 @@ export default function Jobs() {
                 ))}
               </div>
             )}
-            {getDayTotal(day) > 0 && (
+            {canViewMoney && getDayTotal(day) > 0 && (
               <div className="mt-4 pt-3 border-t border-border flex justify-end">
                 <div className="text-lg font-bold text-green-600 dark:text-green-400" data-testid={`daily-total-${format(day, "yyyy-MM-dd")}`}>
                   Day Total: {formatCurrency(getDayTotal(day))}
@@ -625,10 +630,12 @@ export default function Jobs() {
                   </Select>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="price">Price ($)</Label>
-                  <Input type="number" name="price" placeholder="0" min="0" className="rounded-lg" />
-                </div>
+                {canViewMoney && (
+                  <div className="space-y-2">
+                    <Label htmlFor="price">Price ($)</Label>
+                    <Input type="number" name="price" placeholder="0" min="0" className="rounded-lg" />
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="notes">Notes</Label>
@@ -965,10 +972,12 @@ export default function Jobs() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="add-job-price">Price ($)</Label>
-              <Input type="number" name="price" placeholder="0" min="0" data-testid="input-add-job-price" />
-            </div>
+            {canViewMoney && (
+              <div className="space-y-2">
+                <Label htmlFor="add-job-price">Price ($)</Label>
+                <Input type="number" name="price" placeholder="0" min="0" data-testid="input-add-job-price" />
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="add-job-notes">Notes (optional)</Label>
               <Input name="notes" placeholder="Special instructions..." data-testid="input-add-job-notes" />
