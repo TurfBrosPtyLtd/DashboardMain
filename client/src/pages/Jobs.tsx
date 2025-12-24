@@ -37,6 +37,7 @@ export default function Jobs() {
   const [editingCrew, setEditingCrew] = useState<CrewWithMembers | null>(null);
   const [editCrewName, setEditCrewName] = useState("");
   const [selectedStaffId, setSelectedStaffId] = useState<string>("");
+  const [addJobToRunId, setAddJobToRunId] = useState<number | null>(null);
   
   const { data: jobs, isLoading } = useJobs();
   const { data: clients } = useClients();
@@ -251,6 +252,9 @@ export default function Jobs() {
                 {crewName}
               </span>
             )}
+            <Button size="icon" variant="ghost" onClick={() => setAddJobToRunId(jobRun.id)} data-testid={`button-add-job-to-run-${jobRun.id}`}>
+              <Plus className="w-4 h-4" />
+            </Button>
             <Button size="icon" variant="ghost" onClick={() => handleStartEdit(jobRun)} data-testid={`button-edit-jobrun-${jobRun.id}`}>
               <Pencil className="w-4 h-4" />
             </Button>
@@ -850,6 +854,68 @@ export default function Jobs() {
               Done
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!addJobToRunId} onOpenChange={(open) => !open && setAddJobToRunId(null)}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Add Job to Run</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.currentTarget);
+            const targetRun = jobRuns?.find(jr => jr.id === addJobToRunId);
+            await createJob.mutateAsync({
+              clientId: Number(formData.get("clientId")),
+              assignedToId: formData.get("assignedToId") ? Number(formData.get("assignedToId")) : undefined,
+              scheduledDate: targetRun ? new Date(targetRun.date).toISOString() : new Date().toISOString(),
+              notes: formData.get("notes") as string || "",
+              status: "scheduled",
+              jobRunId: addJobToRunId!,
+            });
+            setAddJobToRunId(null);
+          }} className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <Label htmlFor="add-job-client">Client</Label>
+              <Select name="clientId" required>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select client" />
+                </SelectTrigger>
+                <SelectContent>
+                  {clients?.map(client => (
+                    <SelectItem key={client.id} value={String(client.id)}>{client.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="add-job-staff">Assign to Staff (optional)</Label>
+              <Select name="assignedToId">
+                <SelectTrigger>
+                  <SelectValue placeholder="Select staff member" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {staff?.map(s => (
+                    <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="add-job-notes">Notes (optional)</Label>
+              <Input name="notes" placeholder="Special instructions..." data-testid="input-add-job-notes" />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setAddJobToRunId(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createJob.isPending} data-testid="button-submit-add-job">
+                {createJob.isPending ? "Adding..." : "Add Job"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </Layout>
