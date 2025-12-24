@@ -30,9 +30,17 @@ export const clients = pgTable("clients", {
   longitude: text("longitude"),
 });
 
+export const crews = pgTable("crews", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  date: timestamp("date").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const jobs = pgTable("jobs", {
   id: serial("id").primaryKey(),
   clientId: integer("client_id").references(() => clients.id).notNull(),
+  crewId: integer("crew_id").references(() => crews.id),
   assignedToId: integer("assigned_to_id").references(() => staff.id),
   scheduledDate: timestamp("scheduled_date").notNull(),
   status: text("status").default("scheduled").notNull(), // 'scheduled', 'in_progress', 'completed', 'cancelled'
@@ -68,10 +76,18 @@ export const staffRelations = relations(staff, ({ many }) => ({
   jobs: many(jobs),
 }));
 
+export const crewsRelations = relations(crews, ({ many }) => ({
+  jobs: many(jobs),
+}));
+
 export const jobsRelations = relations(jobs, ({ one, many }) => ({
   client: one(clients, {
     fields: [jobs.clientId],
     references: [clients.id],
+  }),
+  crew: one(crews, {
+    fields: [jobs.crewId],
+    references: [crews.id],
   }),
   assignedTo: one(staff, {
     fields: [jobs.assignedToId],
@@ -98,6 +114,7 @@ export const applicationsRelations = relations(applications, ({ one }) => ({
 // Schemas
 export const insertStaffSchema = createInsertSchema(staff).omit({ id: true });
 export const insertClientSchema = createInsertSchema(clients).omit({ id: true });
+export const insertCrewSchema = createInsertSchema(crews).omit({ id: true, createdAt: true });
 export const insertJobSchema = createInsertSchema(jobs).omit({ id: true });
 export const insertFeedbackSchema = createInsertSchema(feedback).omit({ id: true, createdAt: true, sentiment: true, aiAnalysis: true });
 export const insertApplicationSchema = createInsertSchema(applications).omit({ id: true });
@@ -106,6 +123,8 @@ export const insertApplicationSchema = createInsertSchema(applications).omit({ i
 export type Staff = typeof staff.$inferSelect;
 export type InsertStaff = z.infer<typeof insertStaffSchema>;
 export type Client = typeof clients.$inferSelect;
+export type Crew = typeof crews.$inferSelect;
+export type InsertCrew = z.infer<typeof insertCrewSchema>;
 export type Job = typeof jobs.$inferSelect;
 export type Feedback = typeof feedback.$inferSelect;
 export type Application = typeof applications.$inferSelect;

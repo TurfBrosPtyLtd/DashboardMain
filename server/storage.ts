@@ -1,11 +1,12 @@
 import { db } from "./db";
 import {
-  staff, clients, jobs, feedback, applications,
+  staff, clients, crews, jobs, feedback, applications,
   type Staff, type InsertStaff,
   type Client, type InsertStaff as InsertClient,
+  type Crew, type InsertCrew,
   type Job, type Feedback, type Application
 } from "@shared/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, gte, lt } from "drizzle-orm";
 
 export interface IStorage {
   // Staff
@@ -17,6 +18,10 @@ export interface IStorage {
   getClients(): Promise<Client[]>;
   getClient(id: number): Promise<Client | undefined>;
   createClient(client: any): Promise<Client>;
+
+  // Crews
+  getCrews(date?: string): Promise<Crew[]>;
+  createCrew(crew: any): Promise<Crew>;
 
   // Jobs
   getJobs(filters?: { assignedToId?: number; status?: string; date?: string }): Promise<(Job & { client: Client })[]>;
@@ -59,6 +64,24 @@ export class DatabaseStorage implements IStorage {
   async createClient(client: any): Promise<Client> {
     const [newClient] = await db.insert(clients).values(client).returning();
     return newClient;
+  }
+
+  async getCrews(date?: string): Promise<Crew[]> {
+    if (date) {
+      const start = new Date(date);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(date);
+      end.setHours(23, 59, 59, 999);
+      return await db.select().from(crews)
+        .where(and(gte(crews.date, start), lt(crews.date, end)))
+        .orderBy(crews.createdAt);
+    }
+    return await db.select().from(crews).orderBy(desc(crews.date));
+  }
+
+  async createCrew(crew: any): Promise<Crew> {
+    const [newCrew] = await db.insert(crews).values(crew).returning();
+    return newCrew;
   }
 
   async getJobs(filters?: { assignedToId?: number; status?: string; date?: string }): Promise<(Job & { client: Client })[]> {
