@@ -551,8 +551,8 @@ export default function Jobs() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="date">Date & Time</Label>
-                  <Input type="datetime-local" name="date" required className="rounded-lg" />
+                  <Label htmlFor="date">Date</Label>
+                  <Input type="date" name="date" required className="rounded-lg" />
                 </div>
 
                 <div className="space-y-2">
