@@ -1,8 +1,9 @@
 import { db } from "./db";
 import {
-  staff, clients, jobRuns, jobs, feedback, applications,
+  staff, clients, crews, jobRuns, jobs, feedback, applications,
   type Staff, type InsertStaff,
   type Client, type InsertStaff as InsertClient,
+  type Crew, type InsertCrew,
   type JobRun, type InsertJobRun,
   type Job, type Feedback, type Application
 } from "@shared/schema";
@@ -18,6 +19,11 @@ export interface IStorage {
   getClients(): Promise<Client[]>;
   getClient(id: number): Promise<Client | undefined>;
   createClient(client: any): Promise<Client>;
+
+  // Crews
+  getCrews(): Promise<Crew[]>;
+  createCrew(crew: InsertCrew): Promise<Crew>;
+  deleteCrew(id: number): Promise<boolean>;
 
   // Job Runs
   getJobRuns(date?: string): Promise<JobRun[]>;
@@ -66,6 +72,21 @@ export class DatabaseStorage implements IStorage {
   async createClient(client: any): Promise<Client> {
     const [newClient] = await db.insert(clients).values(client).returning();
     return newClient;
+  }
+
+  async getCrews(): Promise<Crew[]> {
+    return await db.select().from(crews).orderBy(crews.name);
+  }
+
+  async createCrew(crew: InsertCrew): Promise<Crew> {
+    const [newCrew] = await db.insert(crews).values(crew).returning();
+    return newCrew;
+  }
+
+  async deleteCrew(id: number): Promise<boolean> {
+    await db.update(jobRuns).set({ crewId: null }).where(eq(jobRuns.crewId, id));
+    await db.delete(crews).where(eq(crews.id, id));
+    return true;
   }
 
   async getJobRuns(date?: string): Promise<JobRun[]> {

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { insertStaffSchema, insertClientSchema, insertJobRunSchema, insertJobSchema, insertFeedbackSchema, insertApplicationSchema, staff, clients, jobRuns, jobs, feedback, applications } from './schema';
+import { insertStaffSchema, insertClientSchema, insertCrewSchema, insertJobRunSchema, insertJobSchema, insertFeedbackSchema, insertApplicationSchema, staff, clients, crews, jobRuns, jobs, feedback, applications } from './schema';
 
 export const errorSchemas = {
   validation: z.object({
@@ -63,6 +63,32 @@ export const api = {
       path: '/api/clients/:id',
       responses: {
         200: z.custom<typeof clients.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+  },
+  crews: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/crews',
+      responses: {
+        200: z.array(z.custom<typeof crews.$inferSelect>()),
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/crews',
+      input: insertCrewSchema,
+      responses: {
+        201: z.custom<typeof crews.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/crews/:id',
+      responses: {
+        200: z.object({ success: z.boolean() }),
         404: errorSchemas.notFound,
       },
     },

@@ -19,7 +19,7 @@ export function useJobRuns(date?: Date) {
 export function useCreateJobRun() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (jobRun: { name: string; date: string; crewName?: string }) => {
+    mutationFn: async (jobRun: { name: string; date: string; crewId?: number }) => {
       const res = await fetch(api.jobRuns.create.path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -38,7 +38,7 @@ export function useCreateJobRun() {
 export function useUpdateJobRun() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...updates }: { id: number; name?: string; crewName?: string }) => {
+    mutationFn: async ({ id, ...updates }: { id: number; name?: string; crewId?: number }) => {
       const res = await fetch(`/api/job-runs/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },

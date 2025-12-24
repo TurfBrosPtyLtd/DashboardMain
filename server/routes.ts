@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
-import { insertJobRunSchema } from "@shared/schema";
+import { insertJobRunSchema, insertCrewSchema } from "@shared/schema";
 import { z } from "zod";
 import OpenAI from "openai";
 
@@ -55,6 +55,31 @@ export async function registerRoutes(
     const client = await storage.getClient(Number(req.params.id));
     if (!client) return res.status(404).json({ message: "Client not found" });
     res.json(client);
+  });
+
+  // Crews
+  app.get(api.crews.list.path, async (req, res) => {
+    const crewList = await storage.getCrews();
+    res.json(crewList);
+  });
+
+  app.post(api.crews.create.path, async (req, res) => {
+    try {
+      const input = insertCrewSchema.parse(req.body);
+      const crew = await storage.createCrew(input);
+      res.status(201).json(crew);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  app.delete(api.crews.delete.path, async (req, res) => {
+    try {
+      await storage.deleteCrew(Number(req.params.id));
+      res.json({ success: true });
+    } catch (err) {
+      res.status(404).json({ message: "Crew not found" });
+    }
   });
 
   // Job Runs

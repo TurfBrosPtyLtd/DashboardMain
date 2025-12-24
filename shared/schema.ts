@@ -30,11 +30,17 @@ export const clients = pgTable("clients", {
   longitude: text("longitude"),
 });
 
+export const crews = pgTable("crews", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const jobRuns = pgTable("job_runs", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   date: timestamp("date").notNull(),
-  crewName: text("crew_name"),
+  crewId: integer("crew_id").references(() => crews.id),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -115,6 +121,7 @@ export const applicationsRelations = relations(applications, ({ one }) => ({
 // Schemas
 export const insertStaffSchema = createInsertSchema(staff).omit({ id: true });
 export const insertClientSchema = createInsertSchema(clients).omit({ id: true });
+export const insertCrewSchema = createInsertSchema(crews).omit({ id: true, createdAt: true });
 export const insertJobRunSchema = createInsertSchema(jobRuns).omit({ id: true, createdAt: true }).extend({ date: z.union([z.date(), z.string().pipe(z.coerce.date())]) });
 export const insertJobSchema = createInsertSchema(jobs).omit({ id: true });
 export const insertFeedbackSchema = createInsertSchema(feedback).omit({ id: true, createdAt: true, sentiment: true, aiAnalysis: true });
@@ -124,6 +131,8 @@ export const insertApplicationSchema = createInsertSchema(applications).omit({ i
 export type Staff = typeof staff.$inferSelect;
 export type InsertStaff = z.infer<typeof insertStaffSchema>;
 export type Client = typeof clients.$inferSelect;
+export type Crew = typeof crews.$inferSelect;
+export type InsertCrew = z.infer<typeof insertCrewSchema>;
 export type JobRun = typeof jobRuns.$inferSelect;
 export type InsertJobRun = z.infer<typeof insertJobRunSchema>;
 export type Job = typeof jobs.$inferSelect;
