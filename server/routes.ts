@@ -69,6 +69,7 @@ export async function registerRoutes(
       const crew = await storage.createCrew(input);
       res.status(201).json(crew);
     } catch (err) {
+      console.error("Create crew error:", err);
       res.status(400).json({ message: "Invalid input" });
     }
   });
