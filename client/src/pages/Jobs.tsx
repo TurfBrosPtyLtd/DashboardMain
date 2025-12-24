@@ -528,6 +528,11 @@ export default function Jobs() {
                           <MapPin className="w-4 h-4 mr-2" />
                           {job.client.address}
                         </div>
+                        {job.price > 0 && (
+                          <div className="flex items-center font-semibold text-green-600 dark:text-green-400">
+                            {formatCurrency(job.price)}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </Link>
