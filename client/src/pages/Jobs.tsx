@@ -59,6 +59,7 @@ export default function Jobs() {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const jobRunId = formData.get("jobRunId");
+    const priceValue = formData.get("price");
     await createJob.mutateAsync({
       clientId: Number(formData.get("clientId")),
       assignedToId: formData.get("assignedToId") ? Number(formData.get("assignedToId")) : undefined,
@@ -66,6 +67,7 @@ export default function Jobs() {
       notes: formData.get("notes") as string,
       status: "scheduled",
       jobRunId: jobRunId && jobRunId !== "none" ? Number(jobRunId) : undefined,
+      price: priceValue ? Number(priceValue) : 0,
     });
     setIsCreateOpen(false);
   };
@@ -571,6 +573,11 @@ export default function Jobs() {
                 </div>
 
                 <div className="space-y-2">
+                  <Label htmlFor="price">Price ($)</Label>
+                  <Input type="number" name="price" placeholder="0" min="0" className="rounded-lg" />
+                </div>
+
+                <div className="space-y-2">
                   <Label htmlFor="notes">Notes</Label>
                   <Input name="notes" placeholder="Gate code, special instructions..." className="rounded-lg" />
                 </div>
@@ -866,6 +873,7 @@ export default function Jobs() {
             e.preventDefault();
             const formData = new FormData(e.currentTarget);
             const targetRun = jobRuns?.find(jr => jr.id === addJobToRunId);
+            const priceValue = formData.get("price");
             await createJob.mutateAsync({
               clientId: Number(formData.get("clientId")),
               assignedToId: formData.get("assignedToId") ? Number(formData.get("assignedToId")) : undefined,
@@ -873,6 +881,7 @@ export default function Jobs() {
               notes: formData.get("notes") as string || "",
               status: "scheduled",
               jobRunId: addJobToRunId!,
+              price: priceValue ? Number(priceValue) : 0,
             });
             setAddJobToRunId(null);
           }} className="space-y-4 mt-4">
@@ -902,6 +911,10 @@ export default function Jobs() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="add-job-price">Price ($)</Label>
+              <Input type="number" name="price" placeholder="0" min="0" data-testid="input-add-job-price" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="add-job-notes">Notes (optional)</Label>
