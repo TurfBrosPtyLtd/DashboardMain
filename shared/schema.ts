@@ -60,6 +60,7 @@ export const jobs = pgTable("jobs", {
   startTime: timestamp("start_time"),
   endTime: timestamp("end_time"),
   notes: text("notes"),
+  price: integer("price").default(0),
 });
 
 export const feedback = pgTable("feedback", {
