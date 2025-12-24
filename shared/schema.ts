@@ -7,6 +7,17 @@ import { relations, sql } from "drizzle-orm";
 export * from "./models/auth";
 export * from "./models/chat";
 
+// Staff roles enum
+export const STAFF_ROLES = ["crew_member", "staff", "team_leader", "manager", "owner"] as const;
+export type StaffRole = typeof STAFF_ROLES[number];
+
+// Roles that can view money values (prices, totals)
+export const MONEY_VIEW_ROLES: StaffRole[] = ["team_leader", "manager", "owner"];
+
+export function canViewMoney(role: string | null | undefined): boolean {
+  return MONEY_VIEW_ROLES.includes(role as StaffRole);
+}
+
 // Staff members (linked to auth users via email/id)
 export const staff = pgTable("staff", {
   id: serial("id").primaryKey(),
@@ -16,7 +27,7 @@ export const staff = pgTable("staff", {
   }),
   name: text("name").notNull(),
   phone: text("phone"),
-  role: text("role").default("staff").notNull(), // 'admin', 'staff'
+  role: text("role").default("staff").notNull(), // 'crew_member', 'staff', 'team_leader', 'manager', 'owner'
 });
 
 export const clients = pgTable("clients", {
