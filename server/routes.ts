@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
-import { insertJobRunSchema, insertCrewSchema } from "@shared/schema";
+import { insertJobRunSchema, insertCrewSchema, updateCrewSchema } from "@shared/schema";
 import { z } from "zod";
 import OpenAI from "openai";
 
@@ -73,12 +73,63 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.crews.delete.path, async (req, res) => {
+  app.put(api.crews.update.path, async (req, res) => {
     try {
-      await storage.deleteCrew(Number(req.params.id));
+      const crewId = z.coerce.number().parse(req.params.id);
+      const input = updateCrewSchema.parse(req.body);
+      const crew = await storage.updateCrew(crewId, input);
+      if (!crew) return res.status(404).json({ message: "Crew not found" });
+      res.json(crew);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  app.delete(api.crews.delete.path, async (req, res) => {
+    let crewId: number;
+    try {
+      crewId = z.coerce.number().parse(req.params.id);
+    } catch {
+      return res.status(400).json({ message: "Invalid crew ID" });
+    }
+    try {
+      await storage.deleteCrew(crewId);
       res.json({ success: true });
     } catch (err) {
       res.status(404).json({ message: "Crew not found" });
+    }
+  });
+
+  app.post(api.crews.addMember.path, async (req, res) => {
+    try {
+      const crewId = z.coerce.number().parse(req.params.id);
+      const input = api.crews.addMember.input.parse(req.body);
+      const member = await storage.addCrewMember(crewId, input.staffId);
+      res.status(201).json(member);
+    } catch (err: any) {
+      const errCode = err?.code || err?.cause?.code;
+      if (errCode === '23505') {
+        res.status(400).json({ message: "Staff member already in this crew" });
+      } else {
+        res.status(400).json({ message: "Invalid input" });
+      }
+    }
+  });
+
+  app.delete(api.crews.removeMember.path, async (req, res) => {
+    let crewId: number;
+    let staffId: number;
+    try {
+      crewId = z.coerce.number().parse(req.params.crewId);
+      staffId = z.coerce.number().parse(req.params.staffId);
+    } catch {
+      return res.status(400).json({ message: "Invalid crew or staff ID" });
+    }
+    try {
+      await storage.removeCrewMember(crewId, staffId);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(404).json({ message: "Crew member not found" });
     }
   });
 

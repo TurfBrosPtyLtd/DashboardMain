@@ -1,9 +1,10 @@
 import { db } from "./db";
 import {
-  staff, clients, crews, jobRuns, jobs, feedback, applications,
+  staff, clients, crews, crewMembers, jobRuns, jobs, feedback, applications,
   type Staff, type InsertStaff,
   type Client, type InsertStaff as InsertClient,
-  type Crew, type InsertCrew,
+  type Crew, type InsertCrew, type UpdateCrew,
+  type CrewMember, type InsertCrewMember,
   type JobRun, type InsertJobRun,
   type Job, type Feedback, type Application
 } from "@shared/schema";
@@ -21,9 +22,12 @@ export interface IStorage {
   createClient(client: any): Promise<Client>;
 
   // Crews
-  getCrews(): Promise<Crew[]>;
+  getCrews(): Promise<(Crew & { members: (CrewMember & { staff: Staff })[] })[]>;
   createCrew(crew: InsertCrew): Promise<Crew>;
+  updateCrew(id: number, updates: UpdateCrew): Promise<Crew>;
   deleteCrew(id: number): Promise<boolean>;
+  addCrewMember(crewId: number, staffId: number): Promise<CrewMember>;
+  removeCrewMember(crewId: number, staffId: number): Promise<boolean>;
 
   // Job Runs
   getJobRuns(date?: string): Promise<JobRun[]>;
@@ -74,8 +78,17 @@ export class DatabaseStorage implements IStorage {
     return newClient;
   }
 
-  async getCrews(): Promise<Crew[]> {
-    return await db.select().from(crews).orderBy(crews.name);
+  async getCrews(): Promise<(Crew & { members: (CrewMember & { staff: Staff })[] })[]> {
+    return await db.query.crews.findMany({
+      with: {
+        members: {
+          with: {
+            staff: true,
+          },
+        },
+      },
+      orderBy: [crews.name],
+    });
   }
 
   async createCrew(crew: InsertCrew): Promise<Crew> {
@@ -83,9 +96,25 @@ export class DatabaseStorage implements IStorage {
     return newCrew;
   }
 
+  async updateCrew(id: number, updates: UpdateCrew): Promise<Crew> {
+    const [updated] = await db.update(crews).set(updates).where(eq(crews.id, id)).returning();
+    return updated;
+  }
+
   async deleteCrew(id: number): Promise<boolean> {
     await db.update(jobRuns).set({ crewId: null }).where(eq(jobRuns.crewId, id));
+    await db.delete(crewMembers).where(eq(crewMembers.crewId, id));
     await db.delete(crews).where(eq(crews.id, id));
+    return true;
+  }
+
+  async addCrewMember(crewId: number, staffId: number): Promise<CrewMember> {
+    const [member] = await db.insert(crewMembers).values({ crewId, staffId }).returning();
+    return member;
+  }
+
+  async removeCrewMember(crewId: number, staffId: number): Promise<boolean> {
+    await db.delete(crewMembers).where(and(eq(crewMembers.crewId, crewId), eq(crewMembers.staffId, staffId)));
     return true;
   }
 

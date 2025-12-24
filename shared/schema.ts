@@ -36,6 +36,12 @@ export const crews = pgTable("crews", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const crewMembers = pgTable("crew_members", {
+  id: serial("id").primaryKey(),
+  crewId: integer("crew_id").references(() => crews.id).notNull(),
+  staffId: integer("staff_id").references(() => staff.id).notNull(),
+});
+
 export const jobRuns = pgTable("job_runs", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
@@ -81,10 +87,31 @@ export const clientsRelations = relations(clients, ({ many }) => ({
 
 export const staffRelations = relations(staff, ({ many }) => ({
   jobs: many(jobs),
+  crewMemberships: many(crewMembers),
 }));
 
-export const jobRunsRelations = relations(jobRuns, ({ many }) => ({
+export const crewsRelations = relations(crews, ({ many }) => ({
+  members: many(crewMembers),
+  jobRuns: many(jobRuns),
+}));
+
+export const crewMembersRelations = relations(crewMembers, ({ one }) => ({
+  crew: one(crews, {
+    fields: [crewMembers.crewId],
+    references: [crews.id],
+  }),
+  staff: one(staff, {
+    fields: [crewMembers.staffId],
+    references: [staff.id],
+  }),
+}));
+
+export const jobRunsRelations = relations(jobRuns, ({ many, one }) => ({
   jobs: many(jobs),
+  crew: one(crews, {
+    fields: [jobRuns.crewId],
+    references: [crews.id],
+  }),
 }));
 
 export const jobsRelations = relations(jobs, ({ one, many }) => ({
@@ -122,6 +149,8 @@ export const applicationsRelations = relations(applications, ({ one }) => ({
 export const insertStaffSchema = createInsertSchema(staff).omit({ id: true });
 export const insertClientSchema = createInsertSchema(clients).omit({ id: true });
 export const insertCrewSchema = createInsertSchema(crews).omit({ id: true, createdAt: true });
+export const updateCrewSchema = z.object({ name: z.string().optional() });
+export const insertCrewMemberSchema = createInsertSchema(crewMembers).omit({ id: true });
 export const insertJobRunSchema = createInsertSchema(jobRuns).omit({ id: true, createdAt: true }).extend({ date: z.union([z.date(), z.string().pipe(z.coerce.date())]) });
 export const insertJobSchema = createInsertSchema(jobs).omit({ id: true });
 export const insertFeedbackSchema = createInsertSchema(feedback).omit({ id: true, createdAt: true, sentiment: true, aiAnalysis: true });
@@ -133,6 +162,9 @@ export type InsertStaff = z.infer<typeof insertStaffSchema>;
 export type Client = typeof clients.$inferSelect;
 export type Crew = typeof crews.$inferSelect;
 export type InsertCrew = z.infer<typeof insertCrewSchema>;
+export type UpdateCrew = z.infer<typeof updateCrewSchema>;
+export type CrewMember = typeof crewMembers.$inferSelect;
+export type InsertCrewMember = z.infer<typeof insertCrewMemberSchema>;
 export type JobRun = typeof jobRuns.$inferSelect;
 export type InsertJobRun = z.infer<typeof insertJobRunSchema>;
 export type Job = typeof jobs.$inferSelect;

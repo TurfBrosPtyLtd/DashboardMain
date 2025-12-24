@@ -4,7 +4,7 @@ import { useJobs, useCreateJob, useUpdateJob } from "@/hooks/use-jobs";
 import { useClients } from "@/hooks/use-clients";
 import { useStaff } from "@/hooks/use-users";
 import { useJobRuns, useCreateJobRun, useUpdateJobRun, useDeleteJobRun } from "@/hooks/use-job-runs";
-import { useCrews, useCreateCrew, useDeleteCrew } from "@/hooks/use-crews";
+import { useCrews, useCreateCrew, useUpdateCrew, useDeleteCrew, useAddCrewMember, useRemoveCrewMember, type CrewWithMembers } from "@/hooks/use-crews";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, addDays, isSameDay, isToday } from "date-fns";
 import { MapPin, Clock, Plus, ChevronLeft, ChevronRight, Zap, Trash2, Pencil, Users, AlertCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
@@ -19,7 +19,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Link } from "wouter";
-import type { JobRun, Crew } from "@shared/schema";
+import type { JobRun, Crew, Staff } from "@shared/schema";
+import { X } from "lucide-react";
 
 type ViewType = "daily" | "weekly" | "monthly";
 
@@ -33,6 +34,9 @@ export default function Jobs() {
   const [selectedCrewId, setSelectedCrewId] = useState<string>("");
   const [manageCrewsOpen, setManageCrewsOpen] = useState(false);
   const [newCrewName, setNewCrewName] = useState("");
+  const [editingCrew, setEditingCrew] = useState<CrewWithMembers | null>(null);
+  const [editCrewName, setEditCrewName] = useState("");
+  const [selectedStaffId, setSelectedStaffId] = useState<string>("");
   
   const { data: jobs, isLoading } = useJobs();
   const { data: clients } = useClients();
@@ -45,7 +49,10 @@ export default function Jobs() {
   const updateJobRun = useUpdateJobRun();
   const deleteJobRun = useDeleteJobRun();
   const createCrew = useCreateCrew();
+  const updateCrew = useUpdateCrew();
   const deleteCrew = useDeleteCrew();
+  const addCrewMember = useAddCrewMember();
+  const removeCrewMember = useRemoveCrewMember();
 
   const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -134,6 +141,45 @@ export default function Jobs() {
   const handleDeleteCrew = async (id: number) => {
     await deleteCrew.mutateAsync(id);
     refetchCrews();
+  };
+
+  const handleStartEditCrew = (crew: CrewWithMembers) => {
+    setEditingCrew(crew);
+    setEditCrewName(crew.name);
+    setSelectedStaffId("");
+  };
+
+  const handleSaveEditCrew = async () => {
+    if (editingCrew && editCrewName.trim()) {
+      await updateCrew.mutateAsync({ id: editingCrew.id, name: editCrewName.trim() });
+      refetchCrews();
+      setEditingCrew(null);
+    }
+  };
+
+  const handleAddStaffToCrew = async () => {
+    if (editingCrew && selectedStaffId && selectedStaffId !== "none") {
+      await addCrewMember.mutateAsync({ crewId: editingCrew.id, staffId: Number(selectedStaffId) });
+      refetchCrews();
+      setSelectedStaffId("");
+      const updatedCrews = await refetchCrews();
+      const updatedCrew = updatedCrews.data?.find(c => c.id === editingCrew.id);
+      if (updatedCrew) setEditingCrew(updatedCrew);
+    }
+  };
+
+  const handleRemoveStaffFromCrew = async (staffId: number) => {
+    if (editingCrew) {
+      await removeCrewMember.mutateAsync({ crewId: editingCrew.id, staffId });
+      const updatedCrews = await refetchCrews();
+      const updatedCrew = updatedCrews.data?.find(c => c.id === editingCrew.id);
+      if (updatedCrew) setEditingCrew(updatedCrew);
+    }
+  };
+
+  const getAvailableStaffForCrew = (crew: CrewWithMembers) => {
+    const assignedStaffIds = crew.members.map(m => m.staffId);
+    return staff?.filter(s => !assignedStaffIds.includes(s.id)) || [];
   };
 
   const getDaysToDisplay = () => {
@@ -691,15 +737,34 @@ export default function Jobs() {
 
             <div className="space-y-2">
               {crews && crews.length > 0 ? (
-                crews.map((crew: Crew) => (
-                  <div key={crew.id} className="flex items-center justify-between p-3 rounded-lg border border-border">
-                    <div className="flex items-center gap-2">
-                      <Users className="w-4 h-4 text-muted-foreground" />
-                      <span className="font-medium">{crew.name}</span>
+                crews.map((crew: CrewWithMembers) => (
+                  <div key={crew.id} className="p-3 rounded-lg border border-border">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Users className="w-4 h-4 text-muted-foreground" />
+                        <span className="font-medium">{crew.name}</span>
+                        {crew.members && crew.members.length > 0 && (
+                          <span className="text-xs text-muted-foreground">({crew.members.length} members)</span>
+                        )}
+                      </div>
+                      <div className="flex gap-1">
+                        <Button size="icon" variant="ghost" onClick={() => handleStartEditCrew(crew)} data-testid={`button-edit-crew-${crew.id}`}>
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button size="icon" variant="ghost" onClick={() => handleDeleteCrew(crew.id)} data-testid={`button-delete-crew-${crew.id}`}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
-                    <Button size="icon" variant="ghost" onClick={() => handleDeleteCrew(crew.id)} data-testid={`button-delete-crew-${crew.id}`}>
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    {crew.members && crew.members.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {crew.members.map(m => (
+                          <span key={m.staffId} className="text-xs bg-muted px-2 py-1 rounded">
+                            {m.staff?.name || `Staff ${m.staffId}`}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))
               ) : (
@@ -709,6 +774,79 @@ export default function Jobs() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setManageCrewsOpen(false)}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editingCrew} onOpenChange={(open) => !open && setEditingCrew(null)}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Edit Crew</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <Label>Crew Name</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={editCrewName}
+                  onChange={(e) => setEditCrewName(e.target.value)}
+                  placeholder="Crew name"
+                  className="rounded-lg"
+                  data-testid="input-edit-crew-name"
+                />
+                <Button onClick={handleSaveEditCrew} disabled={!editCrewName.trim() || updateCrew.isPending} data-testid="button-save-crew">
+                  Save
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Staff Members</Label>
+              {editingCrew && editingCrew.members && editingCrew.members.length > 0 ? (
+                <div className="space-y-1">
+                  {editingCrew.members.map(m => (
+                    <div key={m.staffId} className="flex items-center justify-between p-2 rounded bg-muted">
+                      <span className="text-sm">{m.staff?.name || `Staff ${m.staffId}`}</span>
+                      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleRemoveStaffFromCrew(m.staffId)} data-testid={`button-remove-staff-${m.staffId}`}>
+                        <X className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No staff members assigned to this crew yet.</p>
+              )}
+            </div>
+
+            {editingCrew && (
+              <div className="space-y-2">
+                <Label>Add Staff</Label>
+                {getAvailableStaffForCrew(editingCrew).length > 0 ? (
+                  <div className="flex gap-2">
+                    <Select value={selectedStaffId} onValueChange={setSelectedStaffId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select staff" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {getAvailableStaffForCrew(editingCrew).map(s => (
+                          <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button onClick={handleAddStaffToCrew} disabled={!selectedStaffId || addCrewMember.isPending} data-testid="button-add-staff-to-crew">
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">All staff members are already assigned to this crew.</p>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingCrew(null)}>
               Done
             </Button>
           </DialogFooter>

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { insertStaffSchema, insertClientSchema, insertCrewSchema, insertJobRunSchema, insertJobSchema, insertFeedbackSchema, insertApplicationSchema, staff, clients, crews, jobRuns, jobs, feedback, applications } from './schema';
+import { insertStaffSchema, insertClientSchema, insertCrewSchema, updateCrewSchema, insertCrewMemberSchema, insertJobRunSchema, insertJobSchema, insertFeedbackSchema, insertApplicationSchema, staff, clients, crews, crewMembers, jobRuns, jobs, feedback, applications } from './schema';
 
 export const errorSchemas = {
   validation: z.object({
@@ -72,7 +72,7 @@ export const api = {
       method: 'GET' as const,
       path: '/api/crews',
       responses: {
-        200: z.array(z.custom<typeof crews.$inferSelect>()),
+        200: z.array(z.custom<typeof crews.$inferSelect & { members: Array<typeof crewMembers.$inferSelect & { staff: typeof staff.$inferSelect }> }>()),
       },
     },
     create: {
@@ -84,9 +84,36 @@ export const api = {
         400: errorSchemas.validation,
       },
     },
+    update: {
+      method: 'PUT' as const,
+      path: '/api/crews/:id',
+      input: updateCrewSchema,
+      responses: {
+        200: z.custom<typeof crews.$inferSelect>(),
+        400: errorSchemas.validation,
+        404: errorSchemas.notFound,
+      },
+    },
     delete: {
       method: 'DELETE' as const,
       path: '/api/crews/:id',
+      responses: {
+        200: z.object({ success: z.boolean() }),
+        404: errorSchemas.notFound,
+      },
+    },
+    addMember: {
+      method: 'POST' as const,
+      path: '/api/crews/:id/members',
+      input: z.object({ staffId: z.number() }),
+      responses: {
+        201: z.custom<typeof crewMembers.$inferSelect>(),
+        400: errorSchemas.validation,
+      },
+    },
+    removeMember: {
+      method: 'DELETE' as const,
+      path: '/api/crews/:crewId/members/:staffId',
       responses: {
         200: z.object({ success: z.boolean() }),
         404: errorSchemas.notFound,
