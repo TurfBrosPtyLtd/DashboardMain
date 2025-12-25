@@ -306,6 +306,19 @@ export default function Dashboard() {
                   return crewJobRunIds?.includes(job.jobRunId);
                 }) || [];
 
+                const totalMinutes = filteredJobs.reduce((acc, job) => {
+                  if (job.startTime && job.endTime) {
+                    const start = new Date(job.startTime);
+                    const end = new Date(job.endTime);
+                    const diff = (end.getTime() - start.getTime()) / (1000 * 60);
+                    return acc + Math.max(0, diff);
+                  }
+                  return acc;
+                }, 0);
+
+                const totalHours = Math.floor(totalMinutes / 60);
+                const remainingMinutes = Math.round(totalMinutes % 60);
+
                 if (filteredJobs.length === 0) {
                   return (
                     <div className="text-center py-10 text-muted-foreground">
@@ -317,29 +330,47 @@ export default function Dashboard() {
                   );
                 }
 
-                return filteredJobs.slice(0, 5).map(job => (
-                  <div key={job.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-xl border border-border/50">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-2 h-10 rounded-full ${
-                        job.status === 'completed' ? 'bg-green-500' : 
-                        job.status === 'in_progress' ? 'bg-amber-500' : 'bg-blue-500'
-                      }`} />
-                      <div>
-                        <h3 className="font-semibold text-foreground">{job.client.name}</h3>
-                        <p className="text-sm text-muted-foreground">{job.client.address}</p>
+                return (
+                  <>
+                    {filteredJobs.slice(0, 5).map(job => (
+                      <div key={job.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-xl border border-border/50">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-2 h-10 rounded-full ${
+                            job.status === 'completed' ? 'bg-green-500' : 
+                            job.status === 'in_progress' ? 'bg-amber-500' : 'bg-blue-500'
+                          }`} />
+                          <div>
+                            <h3 className="font-semibold text-foreground">{job.client.name}</h3>
+                            <p className="text-sm text-muted-foreground">{job.client.address}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-mono text-sm font-medium">{format(new Date(job.scheduledDate), 'h:mm a')}</p>
+                          <Badge variant={
+                            job.status === 'completed' ? 'default' : 
+                            job.status === 'in_progress' ? 'secondary' : 'outline'
+                          } className="mt-1">
+                            {job.status.replace('_', ' ')}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="pt-3 mt-3 border-t border-border">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-sm text-muted-foreground">Total Work Time</span>
+                        </div>
+                        <span className="font-semibold">
+                          {totalMinutes > 0 
+                            ? `${totalHours}h ${remainingMinutes}m`
+                            : "No time recorded"
+                          }
+                        </span>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-mono text-sm font-medium">{format(new Date(job.scheduledDate), 'h:mm a')}</p>
-                      <Badge variant={
-                        job.status === 'completed' ? 'default' : 
-                        job.status === 'in_progress' ? 'secondary' : 'outline'
-                      } className="mt-1">
-                        {job.status.replace('_', ' ')}
-                      </Badge>
-                    </div>
-                  </div>
-                ));
+                  </>
+                );
               })()}
             </div>
           </CardContent>
