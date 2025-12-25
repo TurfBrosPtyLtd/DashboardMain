@@ -63,6 +63,15 @@ export default function Dashboard() {
     ? Math.round((onTimeJobs / completedJobsWithTime.length) * 100) 
     : 0;
 
+  const isJobOnTime = (job: { scheduledDate: string | Date; endTime?: string | Date | null }) => {
+    if (!job.endTime) return false;
+    const scheduled = new Date(job.scheduledDate);
+    const ended = new Date(job.endTime);
+    const scheduledEndOfDay = new Date(scheduled);
+    scheduledEndOfDay.setHours(23, 59, 59, 999);
+    return ended <= scheduledEndOfDay;
+  };
+
   const getCrewStats = (crew: CrewWithMembers) => {
     const crewJobs = jobs?.filter(j => {
       if (!j.jobRunId) return false;
@@ -81,16 +90,25 @@ export default function Dashboard() {
 
     const weeklyCompleted = crewWeeklyJobs.filter(j => j.status === 'completed').length;
     const monthlyCompleted = crewMonthlyJobs.filter(j => j.status === 'completed').length;
-    const weeklyRate = crewWeeklyJobs.length > 0 ? Math.round((weeklyCompleted / crewWeeklyJobs.length) * 100) : 0;
-    const monthlyRate = crewMonthlyJobs.length > 0 ? Math.round((monthlyCompleted / crewMonthlyJobs.length) * 100) : 0;
+    
+    const weeklyCompletedWithTime = crewWeeklyJobs.filter(j => j.status === 'completed' && j.endTime);
+    const monthlyCompletedWithTime = crewMonthlyJobs.filter(j => j.status === 'completed' && j.endTime);
+    
+    const weeklyOnTime = weeklyCompletedWithTime.filter(isJobOnTime).length;
+    const monthlyOnTime = monthlyCompletedWithTime.filter(isJobOnTime).length;
+    
+    const weeklyOnTimeRate = weeklyCompletedWithTime.length > 0 ? Math.round((weeklyOnTime / weeklyCompletedWithTime.length) * 100) : 0;
+    const monthlyOnTimeRate = monthlyCompletedWithTime.length > 0 ? Math.round((monthlyOnTime / monthlyCompletedWithTime.length) * 100) : 0;
 
     return {
       weeklyJobs: crewWeeklyJobs.length,
       monthlyJobs: crewMonthlyJobs.length,
       weeklyCompleted,
       monthlyCompleted,
-      weeklyRate,
-      monthlyRate,
+      weeklyOnTime,
+      monthlyOnTime,
+      weeklyOnTimeRate,
+      monthlyOnTimeRate,
       memberCount: crew.members.length,
     };
   };
@@ -320,9 +338,10 @@ export default function Dashboard() {
                     <p className="text-xs text-muted-foreground">of {getCrewStats(selectedCrew).weeklyJobs} completed</p>
                   </div>
                   <div className="p-4 bg-muted/30 rounded-lg">
-                    <p className="text-sm text-muted-foreground">Weekly Rate</p>
-                    <p className="text-2xl font-bold">{getCrewStats(selectedCrew).weeklyRate}%</p>
-                    <Progress value={getCrewStats(selectedCrew).weeklyRate} className="h-2 mt-2" />
+                    <p className="text-sm text-muted-foreground">Weekly On-Time Rate</p>
+                    <p className="text-2xl font-bold">{getCrewStats(selectedCrew).weeklyOnTimeRate}%</p>
+                    <Progress value={getCrewStats(selectedCrew).weeklyOnTimeRate} className="h-2 mt-2" />
+                    <p className="text-xs text-muted-foreground mt-1">{getCrewStats(selectedCrew).weeklyOnTime} on time</p>
                   </div>
                   <div className="p-4 bg-muted/30 rounded-lg">
                     <p className="text-sm text-muted-foreground">Monthly Jobs</p>
@@ -330,9 +349,10 @@ export default function Dashboard() {
                     <p className="text-xs text-muted-foreground">of {getCrewStats(selectedCrew).monthlyJobs} completed</p>
                   </div>
                   <div className="p-4 bg-muted/30 rounded-lg">
-                    <p className="text-sm text-muted-foreground">Monthly Rate</p>
-                    <p className="text-2xl font-bold">{getCrewStats(selectedCrew).monthlyRate}%</p>
-                    <Progress value={getCrewStats(selectedCrew).monthlyRate} className="h-2 mt-2" />
+                    <p className="text-sm text-muted-foreground">Monthly On-Time Rate</p>
+                    <p className="text-2xl font-bold">{getCrewStats(selectedCrew).monthlyOnTimeRate}%</p>
+                    <Progress value={getCrewStats(selectedCrew).monthlyOnTimeRate} className="h-2 mt-2" />
+                    <p className="text-xs text-muted-foreground mt-1">{getCrewStats(selectedCrew).monthlyOnTime} on time</p>
                   </div>
                 </div>
               </div>
@@ -380,8 +400,8 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant={stats.weeklyRate >= 80 ? "default" : stats.weeklyRate >= 50 ? "secondary" : "outline"}>
-                        {stats.weeklyRate}%
+                      <Badge variant={stats.weeklyOnTimeRate >= 80 ? "default" : stats.weeklyOnTimeRate >= 50 ? "secondary" : "outline"}>
+                        {stats.weeklyOnTimeRate}%
                       </Badge>
                       <ChevronRight className="w-4 h-4 text-muted-foreground" />
                     </div>
