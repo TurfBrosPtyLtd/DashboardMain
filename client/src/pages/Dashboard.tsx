@@ -1,7 +1,8 @@
 import { Layout } from "@/components/Layout";
 import { useJobs } from "@/hooks/use-jobs";
 import { useCrews, type CrewWithMembers } from "@/hooks/use-crews";
-import { TrendingUp, CheckCircle2, Clock, Target, Users, ChevronRight, X } from "lucide-react";
+import { useJobRuns } from "@/hooks/use-job-runs";
+import { TrendingUp, CheckCircle2, Clock, Target, Users, ChevronRight } from "lucide-react";
 import { Link } from "wouter";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval } from "date-fns";
 import { useState } from "react";
@@ -15,12 +16,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function Dashboard() {
   const { data: jobs } = useJobs();
   const { data: crews } = useCrews();
+  const { data: jobRuns } = useJobRuns();
   const [selectedCrew, setSelectedCrew] = useState<CrewWithMembers | null>(null);
   const [showCrewSelector, setShowCrewSelector] = useState(false);
+  const [scheduleCrewId, setScheduleCrewId] = useState<string>("all");
 
   const totalStaffCount = crews?.reduce((acc, crew) => acc + crew.members.length, 0) || 0;
 
@@ -266,38 +276,71 @@ export default function Dashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2">
             <CardTitle className="text-xl font-display font-bold">Today's Schedule</CardTitle>
-            <Link href="/jobs" className="text-sm font-medium text-primary hover:underline">View all</Link>
+            <div className="flex items-center gap-2">
+              <Select value={scheduleCrewId} onValueChange={setScheduleCrewId}>
+                <SelectTrigger className="w-[140px]" data-testid="select-schedule-crew">
+                  <SelectValue placeholder="All Crews" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Crews</SelectItem>
+                  {crews?.map(crew => (
+                    <SelectItem key={crew.id} value={crew.id.toString()}>
+                      {crew.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Link href="/jobs" className="text-sm font-medium text-primary hover:underline">View all</Link>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {jobs?.slice(0, 5).map(job => (
-                <div key={job.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-xl border border-border/50">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-2 h-10 rounded-full ${
-                      job.status === 'completed' ? 'bg-green-500' : 
-                      job.status === 'in_progress' ? 'bg-amber-500' : 'bg-blue-500'
-                    }`} />
-                    <div>
-                      <h3 className="font-semibold text-foreground">{job.client.name}</h3>
-                      <p className="text-sm text-muted-foreground">{job.client.address}</p>
+              {(() => {
+                const crewJobRunIds = scheduleCrewId === "all" 
+                  ? null 
+                  : jobRuns?.filter(jr => jr.crewId === parseInt(scheduleCrewId)).map(jr => jr.id) || [];
+                
+                const filteredJobs = jobs?.filter(job => {
+                  if (scheduleCrewId === "all") return true;
+                  if (!job.jobRunId) return false;
+                  return crewJobRunIds?.includes(job.jobRunId);
+                }) || [];
+
+                if (filteredJobs.length === 0) {
+                  return (
+                    <div className="text-center py-10 text-muted-foreground">
+                      {scheduleCrewId === "all" 
+                        ? "No jobs scheduled for today."
+                        : `No jobs scheduled for ${crews?.find(c => c.id === parseInt(scheduleCrewId))?.name || 'this crew'}.`
+                      }
+                    </div>
+                  );
+                }
+
+                return filteredJobs.slice(0, 5).map(job => (
+                  <div key={job.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-xl border border-border/50">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-2 h-10 rounded-full ${
+                        job.status === 'completed' ? 'bg-green-500' : 
+                        job.status === 'in_progress' ? 'bg-amber-500' : 'bg-blue-500'
+                      }`} />
+                      <div>
+                        <h3 className="font-semibold text-foreground">{job.client.name}</h3>
+                        <p className="text-sm text-muted-foreground">{job.client.address}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-mono text-sm font-medium">{format(new Date(job.scheduledDate), 'h:mm a')}</p>
+                      <Badge variant={
+                        job.status === 'completed' ? 'default' : 
+                        job.status === 'in_progress' ? 'secondary' : 'outline'
+                      } className="mt-1">
+                        {job.status.replace('_', ' ')}
+                      </Badge>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-mono text-sm font-medium">{format(new Date(job.scheduledDate), 'h:mm a')}</p>
-                    <Badge variant={
-                      job.status === 'completed' ? 'default' : 
-                      job.status === 'in_progress' ? 'secondary' : 'outline'
-                    } className="mt-1">
-                      {job.status.replace('_', ' ')}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-              {!jobs?.length && (
-                <div className="text-center py-10 text-muted-foreground">
-                  No jobs scheduled for today.
-                </div>
-              )}
+                ));
+              })()}
             </div>
           </CardContent>
         </Card>
