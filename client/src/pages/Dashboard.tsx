@@ -20,6 +20,9 @@ export default function Dashboard() {
   const { data: jobs } = useJobs();
   const { data: crews } = useCrews();
   const [selectedCrew, setSelectedCrew] = useState<CrewWithMembers | null>(null);
+  const [showCrewSelector, setShowCrewSelector] = useState(false);
+
+  const totalStaffCount = crews?.reduce((acc, crew) => acc + crew.members.length, 0) || 0;
 
   const now = new Date();
   const weekStart = startOfWeek(now, { weekStartsOn: 1 });
@@ -189,61 +192,56 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 fade-in-up" style={{ animationDelay: '200ms' }}>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2">
-            <CardTitle className="text-xl font-display font-bold">Crew Performance</CardTitle>
-            <Link href="/crews">
-              <Button variant="outline" size="sm" data-testid="link-manage-crews">
-                Manage Crews
-              </Button>
-            </Link>
+            <CardTitle className="text-xl font-display font-bold">Overall Performance</CardTitle>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setShowCrewSelector(true)}
+              data-testid="button-view-crews"
+            >
+              <Users className="w-4 h-4 mr-2" />
+              View Crews
+            </Button>
           </CardHeader>
           <CardContent>
-            {crews && crews.length > 0 ? (
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 bg-muted/30 rounded-xl border border-border/50">
+                  <p className="text-sm text-muted-foreground mb-1">Total Crews</p>
+                  <p className="text-3xl font-bold">{crews?.length || 0}</p>
+                </div>
+                <div className="p-4 bg-muted/30 rounded-xl border border-border/50">
+                  <p className="text-sm text-muted-foreground mb-1">Total Staff</p>
+                  <p className="text-3xl font-bold">{totalStaffCount}</p>
+                </div>
+              </div>
+              
               <div className="space-y-3">
-                {crews.map(crew => {
-                  const stats = getCrewStats(crew);
-                  return (
-                    <div
-                      key={crew.id}
-                      className="flex items-center justify-between p-4 bg-muted/30 rounded-xl border border-border/50 hover-elevate cursor-pointer"
-                      onClick={() => setSelectedCrew(crew)}
-                      data-testid={`card-crew-${crew.id}`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-primary/10">
-                          <Users className="w-4 h-4 text-primary" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-foreground">{crew.name}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            {stats.memberCount} member{stats.memberCount !== 1 ? 's' : ''}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <p className="text-sm font-medium">{stats.weeklyCompleted}/{stats.weeklyJobs}</p>
-                          <p className="text-xs text-muted-foreground">this week</p>
-                        </div>
-                        <Badge variant={stats.weeklyRate >= 80 ? "default" : stats.weeklyRate >= 50 ? "secondary" : "outline"}>
-                          {stats.weeklyRate}%
-                        </Badge>
-                        <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                      </div>
-                    </div>
-                  );
-                })}
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Weekly Completion</span>
+                  <span className="font-semibold">{weeklyCompleted} / {weeklyTotal} jobs</span>
+                </div>
+                <Progress value={weeklyCompletionRate} className="h-3" />
+                
+                <div className="flex items-center justify-between mt-4">
+                  <span className="text-sm text-muted-foreground">Monthly Completion</span>
+                  <span className="font-semibold">{monthlyCompleted} / {monthlyTotal} jobs</span>
+                </div>
+                <Progress value={monthlyCompletionRate} className="h-3" />
               </div>
-            ) : (
-              <div className="text-center py-10 text-muted-foreground">
-                <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>No crews created yet.</p>
-                <Link href="/crews">
-                  <Button variant="outline" className="mt-4" data-testid="button-create-first-crew">
-                    Create Your First Crew
-                  </Button>
-                </Link>
+
+              <div className="pt-4 border-t border-border">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-sm">On-Time Rate</span>
+                  </div>
+                  <Badge variant={onTimeRate >= 80 ? "default" : onTimeRate >= 50 ? "secondary" : "outline"}>
+                    {onTimeRate}%
+                  </Badge>
+                </div>
               </div>
-            )}
+            </div>
           </CardContent>
         </Card>
 
@@ -348,6 +346,60 @@ export default function Dashboard() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showCrewSelector} onOpenChange={setShowCrewSelector}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Select a Crew</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            {crews && crews.length > 0 ? (
+              crews.map(crew => {
+                const stats = getCrewStats(crew);
+                return (
+                  <div
+                    key={crew.id}
+                    className="flex items-center justify-between p-4 bg-muted/30 rounded-xl border border-border/50 hover-elevate cursor-pointer"
+                    onClick={() => {
+                      setShowCrewSelector(false);
+                      setSelectedCrew(crew);
+                    }}
+                    data-testid={`select-crew-${crew.id}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-primary/10">
+                        <Users className="w-4 h-4 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-foreground">{crew.name}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {stats.memberCount} member{stats.memberCount !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={stats.weeklyRate >= 80 ? "default" : stats.weeklyRate >= 50 ? "secondary" : "outline"}>
+                        {stats.weeklyRate}%
+                      </Badge>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <Users className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                <p>No crews created yet.</p>
+                <Link href="/crews">
+                  <Button variant="outline" className="mt-3" size="sm" onClick={() => setShowCrewSelector(false)}>
+                    Create Crew
+                  </Button>
+                </Link>
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </Layout>
