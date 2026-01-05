@@ -420,7 +420,10 @@ export const insertCrewSchema = createInsertSchema(crews).omit({ id: true, creat
 export const updateCrewSchema = z.object({ name: z.string().optional() });
 export const insertCrewMemberSchema = createInsertSchema(crewMembers).omit({ id: true });
 export const insertJobRunSchema = createInsertSchema(jobRuns).omit({ id: true, createdAt: true }).extend({ date: z.union([z.date(), z.string().pipe(z.coerce.date())]) });
-export const insertJobSchema = createInsertSchema(jobs).omit({ id: true });
+export const insertJobSchema = createInsertSchema(jobs).omit({ id: true }).extend({
+  scheduledDate: z.union([z.date(), z.string().pipe(z.coerce.date())]),
+  scheduledTime: z.union([z.date(), z.string().pipe(z.coerce.date())]).optional().nullable(),
+});
 export const insertFeedbackSchema = createInsertSchema(feedback).omit({ id: true, createdAt: true, sentiment: true, aiAnalysis: true });
 export const insertApplicationSchema = createInsertSchema(applications).omit({ id: true });
 
