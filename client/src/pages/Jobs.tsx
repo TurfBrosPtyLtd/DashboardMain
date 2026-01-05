@@ -45,6 +45,7 @@ export default function Jobs() {
   
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [selectedMowerId, setSelectedMowerId] = useState<string>("");
+  const [selectedProgramTier, setSelectedProgramTier] = useState<string>("");
   const [cutHeightUnit, setCutHeightUnit] = useState<string>("level");
   const [cutHeightValue, setCutHeightValue] = useState<string>("");
   const [newJobTasks, setNewJobTasks] = useState<string[]>([]);
@@ -96,6 +97,7 @@ export default function Jobs() {
   const resetNewJobForm = () => {
     setSelectedClientId("");
     setSelectedMowerId("");
+    setSelectedProgramTier("");
     setCutHeightUnit("level");
     setCutHeightValue("");
     setNewJobTasks([]);
@@ -119,6 +121,7 @@ export default function Jobs() {
       status: "scheduled",
       jobRunId: jobRunId && jobRunId !== "none" ? Number(jobRunId) : undefined,
       price: priceValue ? Number(priceValue) : 0,
+      programTier: selectedProgramTier || undefined,
       mowerId: selectedMowerId && selectedMowerId !== "none" ? Number(selectedMowerId) : undefined,
       cutHeightUnit: cutHeightUnit || undefined,
       cutHeightValue: cutHeightValue || undefined,
@@ -654,13 +657,25 @@ export default function Jobs() {
                       </SelectContent>
                     </Select>
                     {getSelectedClient() && (
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge variant="secondary" className="text-xs" data-testid="badge-program-tier">
-                          {getProgramTierLabel(getSelectedClient()?.programTier)}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">{getSelectedClient()?.address}</span>
-                      </div>
+                      <span className="text-xs text-muted-foreground">{getSelectedClient()?.address}</span>
                     )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="program">Program</Label>
+                    <Select value={selectedProgramTier} onValueChange={setSelectedProgramTier}>
+                      <SelectTrigger data-testid="select-program">
+                        <SelectValue placeholder="Select program (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="22">Essentials (22 services/year)</SelectItem>
+                        <SelectItem value="24">Elite (24 services/year)</SelectItem>
+                        <SelectItem value="26">Prestige (26 services/year)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Selecting a program will schedule future services based on the start date.
+                    </p>
                   </div>
                   
                   <div className="grid grid-cols-2 gap-3">

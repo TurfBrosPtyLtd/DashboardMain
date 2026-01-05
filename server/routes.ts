@@ -10,6 +10,7 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 import OpenAI from "openai";
+import { generateServiceWeeks, applySkipLogic } from "@shared/serviceDistribution";
 
 // Helper to get current user's staff role and ID
 async function getCurrentUserRole(req: Request): Promise<string | null> {
@@ -265,6 +266,100 @@ export async function registerRoutes(
             sortOrder: i,
             isCompleted: false,
           });
+        }
+      }
+      
+      // Auto-schedule future jobs if a program tier is selected
+      if (input.programTier && input.scheduledDate) {
+        const annualServices = parseInt(input.programTier, 10);
+        const startDate = new Date(input.scheduledDate);
+        
+        const { addWeeks, getMonth, format } = await import("date-fns");
+        
+        // Generate all 26 fortnightly slots from start date
+        const fortnightlySlots: { date: Date; month: number }[] = [];
+        let slotDate = startDate;
+        for (let i = 0; i < 26; i++) {
+          if (i > 0) slotDate = addWeeks(slotDate, 2);
+          fortnightlySlots.push({ date: new Date(slotDate), month: getMonth(slotDate) });
+        }
+        
+        // Apply skip logic similar to serviceDistribution.ts
+        const skipsNeeded = 26 - annualServices;
+        const slowdownMonths = skipsNeeded >= 4 ? [4, 5, 6, 7] : [5, 6, 7]; // May-Aug or Jun-Aug
+        const shoulderMonths = [3, 8, 9, 10];
+        
+        const skippedIndices = new Set<number>();
+        let skipped = 0;
+        
+        // Round-robin skip: spread skips evenly across slowdown months
+        while (skipped < skipsNeeded) {
+          let skippedThisRound = false;
+          
+          // First try slowdown months
+          for (const month of slowdownMonths) {
+            if (skipped >= skipsNeeded) break;
+            const candidates = fortnightlySlots
+              .map((s, i) => ({ ...s, idx: i }))
+              .filter(s => s.month === month && !skippedIndices.has(s.idx));
+            if (candidates.length > 1) {
+              skippedIndices.add(candidates[0].idx);
+              skipped++;
+              skippedThisRound = true;
+              break;
+            }
+          }
+          
+          // Then try shoulder months
+          if (!skippedThisRound && skipped < skipsNeeded) {
+            for (const month of shoulderMonths) {
+              if (skipped >= skipsNeeded) break;
+              const candidates = fortnightlySlots
+                .map((s, i) => ({ ...s, idx: i }))
+                .filter(s => s.month === month && !skippedIndices.has(s.idx));
+              if (candidates.length > 1) {
+                skippedIndices.add(candidates[0].idx);
+                skipped++;
+                skippedThisRound = true;
+                break;
+              }
+            }
+          }
+          
+          if (!skippedThisRound) break; // No more candidates
+        }
+        
+        // Check for existing jobs for this client to prevent duplicates (UTC-safe)
+        const existingJobs = await storage.getJobs({ clientId: input.clientId });
+        const existingDates = new Set(
+          existingJobs.map(j => format(new Date(j.scheduledDate), "yyyy-MM-dd"))
+        );
+        
+        // Create jobs for non-skipped slots (skip index 0 since that's the already-created first job)
+        for (let i = 1; i < fortnightlySlots.length; i++) {
+          if (skippedIndices.has(i)) continue;
+          
+          const slot = fortnightlySlots[i];
+          const dateKey = format(slot.date, "yyyy-MM-dd");
+          
+          if (!existingDates.has(dateKey)) {
+            await storage.createJob({
+              clientId: input.clientId,
+              scheduledDate: slot.date,
+              status: "scheduled",
+              programTier: input.programTier,
+              assignedToId: input.assignedToId,
+              mowerId: input.mowerId,
+              cutHeightUnit: input.cutHeightUnit,
+              cutHeightValue: input.cutHeightValue,
+              siteInformation: input.siteInformation,
+              gateCode: canViewGate ? input.gateCode : null,
+              price: canViewPrice ? input.price : 0,
+              notes: input.notes,
+              estimatedDurationMinutes: input.estimatedDurationMinutes,
+            });
+            existingDates.add(dateKey);
+          }
         }
       }
       

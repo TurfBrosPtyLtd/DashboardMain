@@ -98,6 +98,8 @@ export const jobs = pgTable("jobs", {
   endTime: timestamp("end_time"),
   notes: text("notes"),
   price: integer("price").default(0),
+  // Program tier - linked to job, not client
+  programTier: text("program_tier"), // '22', '24', '26' - Essentials, Elite, Prestige
   // Mower and cut height
   mowerId: integer("mower_id"),
   cutHeightUnit: text("cut_height_unit"), // 'level', 'millimeter', 'inch'
