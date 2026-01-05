@@ -37,14 +37,28 @@ function MowerIcon({ type }: { type: string }) {
   }
 }
 
-function TreatmentIcon({ category }: { category: string | null }) {
+const CATEGORY_COLORS: Record<string, string> = {
+  green: "text-green-600",
+  blue: "text-blue-600",
+  amber: "text-amber-600",
+  red: "text-red-600",
+  purple: "text-purple-600",
+  cyan: "text-cyan-600",
+  gray: "text-gray-600",
+};
+
+function TreatmentIcon({ category, categories }: { category: string | null; categories?: TreatmentCategory[] }) {
+  const categoryData = categories?.find(c => c.slug === category);
+  const colorClass = categoryData?.color ? CATEGORY_COLORS[categoryData.color] || "text-purple-600" : "text-purple-600";
+  
+  // Fallback icon based on slug for backward compatibility
   switch (category) {
-    case "fertilizer": return <Leaf className="w-5 h-5 text-green-600" />;
-    case "soil": return <Droplet className="w-5 h-5 text-amber-600" />;
-    case "aeration": return <CircleDot className="w-5 h-5 text-gray-600" />;
-    case "irrigation": return <Droplets className="w-5 h-5 text-blue-600" />;
-    case "pest": return <Bug className="w-5 h-5 text-red-600" />;
-    default: return <FlaskConical className="w-5 h-5 text-purple-600" />;
+    case "fertilizer": return <Leaf className={`w-5 h-5 ${colorClass}`} />;
+    case "soil": return <Droplet className={`w-5 h-5 ${colorClass}`} />;
+    case "aeration": return <CircleDot className={`w-5 h-5 ${colorClass}`} />;
+    case "irrigation": return <Droplets className={`w-5 h-5 ${colorClass}`} />;
+    case "pest": return <Bug className={`w-5 h-5 ${colorClass}`} />;
+    default: return <FlaskConical className={`w-5 h-5 ${colorClass}`} />;
   }
 }
 
@@ -72,11 +86,13 @@ const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "Ju
 function TreatmentProgramScheduleSection({ 
   programId, 
   treatmentTypes, 
+  treatmentCategories,
   isManager,
   onEdit
 }: { 
   programId: number; 
   treatmentTypes: TreatmentType[]; 
+  treatmentCategories?: TreatmentCategory[];
   isManager: boolean;
   onEdit?: (item: TreatmentProgramSchedule & { treatmentType: TreatmentType }, programId: number) => void;
 }) {
@@ -111,7 +127,7 @@ function TreatmentProgramScheduleSection({
   const renderScheduleItem = (item: typeof schedules[0]) => (
     <div key={item.id} className="flex items-center justify-between gap-1 text-xs">
       <div className="flex items-center gap-1 min-w-0">
-        <TreatmentIcon category={item.treatmentType?.category || null} />
+        <TreatmentIcon category={item.treatmentType?.category || null} categories={treatmentCategories} />
         <span className="truncate">{item.treatmentType?.name || "Unknown"}</span>
         {item.visitNumber && (
           <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">V{item.visitNumber}</Badge>
@@ -976,7 +992,7 @@ export default function Settings() {
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                          <TreatmentIcon category={treatment.category} />
+                          <TreatmentIcon category={treatment.category} categories={treatmentCategories} />
                         </div>
                         <div>
                           <p className="font-semibold">{treatment.name}</p>
@@ -1149,6 +1165,7 @@ export default function Settings() {
                         <TreatmentProgramScheduleSection
                           programId={program.id}
                           treatmentTypes={treatmentTypes || []}
+                          treatmentCategories={treatmentCategories}
                           isManager={isManager}
                           onEdit={openEditScheduleItem}
                         />
@@ -1525,7 +1542,7 @@ export default function Settings() {
                                     data-testid={`program-treatment-${pt.id}`}
                                   >
                                     <div className="flex items-center gap-2">
-                                      <TreatmentIcon category={pt.treatmentType?.category || null} />
+                                      <TreatmentIcon category={pt.treatmentType?.category || null} categories={treatmentCategories} />
                                       <div>
                                         <p className="text-sm font-medium">{pt.treatmentType?.name}</p>
                                         <p className="text-xs text-muted-foreground">

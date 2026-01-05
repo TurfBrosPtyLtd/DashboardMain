@@ -428,6 +428,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTreatmentCategory(category: InsertTreatmentCategory): Promise<TreatmentCategory> {
+    // Check if a soft-deleted category with the same slug exists, and reactivate it
+    const existing = await db.select().from(treatmentCategories).where(
+      and(eq(treatmentCategories.slug, category.slug), eq(treatmentCategories.isActive, false))
+    );
+    if (existing.length > 0) {
+      // Reactivate with new values, preserving existing values for unspecified fields
+      const existingCategory = existing[0];
+      const [reactivated] = await db.update(treatmentCategories)
+        .set({ 
+          name: category.name || existingCategory.name,
+          icon: category.icon || existingCategory.icon,
+          color: category.color || existingCategory.color,
+          sortOrder: category.sortOrder ?? existingCategory.sortOrder,
+          isActive: true 
+        })
+        .where(eq(treatmentCategories.id, existingCategory.id))
+        .returning();
+      return reactivated;
+    }
     const [newCategory] = await db.insert(treatmentCategories).values(category).returning();
     return newCategory;
   }
