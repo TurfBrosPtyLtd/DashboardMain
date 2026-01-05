@@ -22,19 +22,22 @@ export function useCreateJobPhoto() {
       url, 
       photoType,
       filename,
-      caption 
+      caption,
+      takenAt
     }: { 
       jobId: number; 
       url: string; 
       photoType: "before" | "during" | "after";
       filename: string;
       caption?: string;
+      takenAt?: string;
     }) => {
       const res = await apiRequest("POST", `/api/jobs/${jobId}/photos`, { 
         url, 
         photoType,
         filename,
-        caption 
+        caption,
+        takenAt
       });
       return res.json();
     },

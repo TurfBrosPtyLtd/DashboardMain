@@ -10,6 +10,7 @@ import { useJobTasks, useCreateJobTask, useToggleJobTask, useDeleteJobTask } fro
 import { useJobPhotos, useCreateJobPhoto, useDeleteJobPhoto } from "@/hooks/use-job-photos";
 import { useUpload } from "@/hooks/use-upload";
 import { Camera } from "lucide-react";
+import ExifReader from "exifreader";
 import { useQuery } from "@tanstack/react-query";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, addDays, isSameDay, isToday } from "date-fns";
 import { MapPin, Clock, Plus, ChevronLeft, ChevronRight, Zap, Trash2, Pencil, Users, AlertCircle, Scissors, CalendarDays, MoreVertical, Check, SkipForward, ExternalLink, Navigation, Play, Square, Timer } from "lucide-react";
@@ -178,14 +179,29 @@ export default function Jobs() {
       return;
     }
     
+    // Extract EXIF date taken
+    let takenAt: string | undefined;
+    try {
+      const tags = await ExifReader.load(file);
+      const dateTimeOriginal = tags['DateTimeOriginal']?.description;
+      if (dateTimeOriginal) {
+        // EXIF format: "YYYY:MM:DD HH:MM:SS" -> convert to ISO
+        const [datePart, timePart] = dateTimeOriginal.split(' ');
+        const [year, month, day] = datePart.split(':');
+        takenAt = new Date(`${year}-${month}-${day}T${timePart}`).toISOString();
+      }
+    } catch (err) {
+      // No EXIF data available, will use current time
+    }
+    
     const response = await uploadFile(file);
     if (response) {
-      // The objectPath is already in format /objects/... which is served by our routes
       await createJobPhoto.mutateAsync({
         jobId: selectedJobId,
         url: response.objectPath,
         photoType,
-        filename: file.name
+        filename: file.name,
+        takenAt
       });
     }
     e.target.value = "";
@@ -1796,7 +1812,7 @@ export default function Jobs() {
                                 </Button>
                               </div>
                               <div className="text-xs text-white/80">
-                                {photo.createdAt && format(new Date(photo.createdAt), "MMM d, h:mm a")}
+                                {(photo.takenAt || photo.createdAt) && format(new Date(photo.takenAt || photo.createdAt!), "MMM d, h:mm a")}
                               </div>
                             </div>
                           </div>
