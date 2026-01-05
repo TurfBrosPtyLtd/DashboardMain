@@ -31,7 +31,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import type { JobRun, Crew, Staff, Mower, Client, Job, JobTask, ClientProgramTreatment, TreatmentType } from "@shared/schema";
+import type { JobRun, Crew, Staff, Mower, Client, Job, JobTask, ClientProgramTreatment, TreatmentType, ProgramTemplate } from "@shared/schema";
 import { Leaf } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
@@ -57,7 +57,7 @@ export default function Jobs() {
   
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [selectedMowerId, setSelectedMowerId] = useState<string>("");
-  const [selectedProgramTier, setSelectedProgramTier] = useState<string>("");
+  const [selectedProgramTemplateId, setSelectedProgramTemplateId] = useState<string>("");
   const [cutHeightUnit, setCutHeightUnit] = useState<string>("level");
   const [cutHeightValue, setCutHeightValue] = useState<string>("");
   const [newJobTasks, setNewJobTasks] = useState<string[]>([]);
@@ -70,11 +70,39 @@ export default function Jobs() {
   const [popupTaskInput, setPopupTaskInput] = useState<string>("");
   const [photoType, setPhotoType] = useState<"before" | "during" | "after">("during");
   
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editFormData, setEditFormData] = useState<{
+    scheduledDate: string;
+    assignedToId: string;
+    mowerId: string;
+    cutHeightUnit: string;
+    cutHeightValue: string;
+    gateCode: string;
+    siteInformation: string;
+    price: string;
+    notes: string;
+    estimatedDurationMinutes: string;
+    programTemplateId: string;
+  }>({
+    scheduledDate: "",
+    assignedToId: "",
+    mowerId: "",
+    cutHeightUnit: "level",
+    cutHeightValue: "",
+    gateCode: "",
+    siteInformation: "",
+    price: "",
+    notes: "",
+    estimatedDurationMinutes: "",
+    programTemplateId: "",
+  });
+  
   const { data: jobs, isLoading } = useJobs();
   const { data: clients } = useClients();
   const { data: staff } = useStaff();
   const { canViewMoney, canViewGateCode } = useCurrentStaff();
   const { data: mowers } = useQuery<Mower[]>({ queryKey: ["/api/mowers"] });
+  const { data: programTemplates } = useQuery<ProgramTemplate[]>({ queryKey: ["/api/program-templates"] });
   const { data: jobRuns, refetch: refetchJobRuns } = useJobRuns();
   const { data: crews, refetch: refetchCrews } = useCrews();
   const createJob = useCreateJob();
@@ -275,7 +303,7 @@ export default function Jobs() {
   const resetNewJobForm = () => {
     setSelectedClientId("");
     setSelectedMowerId("");
-    setSelectedProgramTier("");
+    setSelectedProgramTemplateId("");
     setCutHeightUnit("level");
     setCutHeightValue("");
     setNewJobTasks([]);
@@ -291,6 +319,9 @@ export default function Jobs() {
     const siteInfoValue = formData.get("siteInformation") as string;
     const estimatedDuration = formData.get("estimatedDuration");
     
+    const selectedTemplate = selectedProgramTemplateId && selectedProgramTemplateId !== "none" 
+      ? programTemplates?.find(t => String(t.id) === selectedProgramTemplateId) 
+      : undefined;
     await createJob.mutateAsync({
       clientId: Number(selectedClientId),
       assignedToId: formData.get("assignedToId") ? Number(formData.get("assignedToId")) : undefined,
@@ -299,7 +330,8 @@ export default function Jobs() {
       status: "scheduled",
       jobRunId: jobRunId && jobRunId !== "none" ? Number(jobRunId) : undefined,
       price: priceValue ? Number(priceValue) : 0,
-      programTier: selectedProgramTier || undefined,
+      programTemplateId: selectedTemplate ? selectedTemplate.id : undefined,
+      programTier: selectedTemplate ? String(selectedTemplate.servicesPerYear) : undefined,
       mowerId: selectedMowerId && selectedMowerId !== "none" ? Number(selectedMowerId) : undefined,
       cutHeightUnit: cutHeightUnit || undefined,
       cutHeightValue: cutHeightValue || undefined,
@@ -512,6 +544,50 @@ export default function Jobs() {
 
   const handleSaveStaffNotes = async (jobId: number) => {
     await updateJob.mutateAsync({ id: jobId, jobNotes: staffNotes });
+  };
+
+  const handleEnterEditMode = (job: Job & { client: Client }) => {
+    setEditFormData({
+      scheduledDate: format(new Date(job.scheduledDate), "yyyy-MM-dd"),
+      assignedToId: job.assignedToId ? String(job.assignedToId) : "",
+      mowerId: job.mowerId ? String(job.mowerId) : "",
+      cutHeightUnit: job.cutHeightUnit || "level",
+      cutHeightValue: job.cutHeightValue || "",
+      gateCode: job.gateCode || "",
+      siteInformation: job.siteInformation || "",
+      price: job.price ? String(job.price) : "",
+      notes: job.notes || "",
+      estimatedDurationMinutes: job.estimatedDurationMinutes ? String(job.estimatedDurationMinutes) : "",
+      programTemplateId: job.programTemplateId ? String(job.programTemplateId) : "",
+    });
+    setIsEditMode(true);
+  };
+
+  const handleSaveJobEdit = async () => {
+    if (!selectedJobId) return;
+    const selectedTemplate = editFormData.programTemplateId && editFormData.programTemplateId !== "none"
+      ? programTemplates?.find(t => String(t.id) === editFormData.programTemplateId)
+      : undefined;
+    await updateJob.mutateAsync({
+      id: selectedJobId,
+      scheduledDate: new Date(editFormData.scheduledDate),
+      assignedToId: editFormData.assignedToId && editFormData.assignedToId !== "none" ? Number(editFormData.assignedToId) : undefined,
+      mowerId: editFormData.mowerId && editFormData.mowerId !== "none" ? Number(editFormData.mowerId) : undefined,
+      cutHeightUnit: editFormData.cutHeightUnit || undefined,
+      cutHeightValue: editFormData.cutHeightValue || undefined,
+      gateCode: editFormData.gateCode || undefined,
+      siteInformation: editFormData.siteInformation || undefined,
+      price: editFormData.price ? Number(editFormData.price) : undefined,
+      notes: editFormData.notes || undefined,
+      estimatedDurationMinutes: editFormData.estimatedDurationMinutes ? Number(editFormData.estimatedDurationMinutes) : undefined,
+      programTemplateId: selectedTemplate ? selectedTemplate.id : null,
+      programTier: selectedTemplate ? String(selectedTemplate.servicesPerYear) : null,
+    });
+    setIsEditMode(false);
+  };
+
+  const handleCancelJobEdit = () => {
+    setIsEditMode(false);
   };
 
   const getDaysToDisplay = () => {
@@ -928,14 +1004,16 @@ export default function Jobs() {
 
                   <div className="space-y-2">
                     <Label htmlFor="program">Program</Label>
-                    <Select value={selectedProgramTier} onValueChange={setSelectedProgramTier}>
+                    <Select value={selectedProgramTemplateId} onValueChange={setSelectedProgramTemplateId}>
                       <SelectTrigger data-testid="select-program">
                         <SelectValue placeholder="Select program (optional)" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="22">Essentials (22 services/year)</SelectItem>
-                        <SelectItem value="24">Elite (24 services/year)</SelectItem>
-                        <SelectItem value="26">Prestige (26 services/year)</SelectItem>
+                        {programTemplates?.map(template => (
+                          <SelectItem key={template.id} value={String(template.id)}>
+                            {template.name} ({template.servicesPerYear} services/year)
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
@@ -1466,7 +1544,7 @@ export default function Jobs() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!selectedJob} onOpenChange={(open) => !open && setSelectedJobId(null)}>
+      <Dialog open={!!selectedJob} onOpenChange={(open) => { if (!open) { setSelectedJobId(null); setIsEditMode(false); } }}>
         <DialogContent className="sm:max-w-[600px] max-h-[90vh]">
           {selectedJob && (
             <>
@@ -1483,6 +1561,10 @@ export default function Jobs() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleEnterEditMode(selectedJob)} data-testid="button-edit-job">
+                          <Pencil className="w-4 h-4 mr-2" />
+                          Edit Job
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleSkipJob(selectedJob.id)} data-testid="button-skip-job">
                           <SkipForward className="w-4 h-4 mr-2" />
                           Skip This Job
@@ -1512,6 +1594,161 @@ export default function Jobs() {
               </DialogHeader>
               
               <ScrollArea className="max-h-[70vh] pr-4">
+                {isEditMode ? (
+                  <div className="space-y-4 mt-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label>Date</Label>
+                        <Input 
+                          type="date" 
+                          value={editFormData.scheduledDate}
+                          onChange={(e) => setEditFormData({ ...editFormData, scheduledDate: e.target.value })}
+                          data-testid="input-edit-date"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Duration (mins)</Label>
+                        <Input 
+                          type="number" 
+                          value={editFormData.estimatedDurationMinutes}
+                          onChange={(e) => setEditFormData({ ...editFormData, estimatedDurationMinutes: e.target.value })}
+                          placeholder="45"
+                          data-testid="input-edit-duration"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Assign To</Label>
+                      <Select value={editFormData.assignedToId} onValueChange={(v) => setEditFormData({ ...editFormData, assignedToId: v })}>
+                        <SelectTrigger data-testid="select-edit-staff">
+                          <SelectValue placeholder="Select staff member" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          {staff?.map(member => (
+                            <SelectItem key={member.id} value={String(member.id)}>{member.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Mower</Label>
+                      <Select value={editFormData.mowerId} onValueChange={(v) => setEditFormData({ ...editFormData, mowerId: v })}>
+                        <SelectTrigger data-testid="select-edit-mower">
+                          <SelectValue placeholder="Select mower" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No mower selected</SelectItem>
+                          {mowers?.filter(m => m.isActive).map(mower => (
+                            <SelectItem key={mower.id} value={String(mower.id)}>
+                              {mower.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Program</Label>
+                      <Select value={editFormData.programTemplateId} onValueChange={(v) => setEditFormData({ ...editFormData, programTemplateId: v })}>
+                        <SelectTrigger data-testid="select-edit-program">
+                          <SelectValue placeholder="Select program (optional)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No program</SelectItem>
+                          {programTemplates?.map(template => (
+                            <SelectItem key={template.id} value={String(template.id)}>
+                              {template.name} ({template.servicesPerYear}/yr)
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label>Cut Height Unit</Label>
+                        <Select value={editFormData.cutHeightUnit} onValueChange={(v) => setEditFormData({ ...editFormData, cutHeightUnit: v })}>
+                          <SelectTrigger data-testid="select-edit-cut-unit">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="level">Level (1-7)</SelectItem>
+                            <SelectItem value="millimeter">Millimeters</SelectItem>
+                            <SelectItem value="inch">Inches</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Cut Height</Label>
+                        <Input 
+                          value={editFormData.cutHeightValue}
+                          onChange={(e) => setEditFormData({ ...editFormData, cutHeightValue: e.target.value })}
+                          placeholder={editFormData.cutHeightUnit === "level" ? "4" : "50mm"}
+                          data-testid="input-edit-cut-height"
+                        />
+                      </div>
+                    </div>
+
+                    {canViewGateCode && (
+                      <div className="space-y-2">
+                        <Label>Gate Code</Label>
+                        <Input 
+                          value={editFormData.gateCode}
+                          onChange={(e) => setEditFormData({ ...editFormData, gateCode: e.target.value })}
+                          placeholder="Enter gate code"
+                          data-testid="input-edit-gate-code"
+                        />
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <Label>Site Notes</Label>
+                      <Textarea 
+                        value={editFormData.siteInformation}
+                        onChange={(e) => setEditFormData({ ...editFormData, siteInformation: e.target.value })}
+                        placeholder="Special access instructions..."
+                        rows={2}
+                        data-testid="input-edit-site-info"
+                      />
+                    </div>
+
+                    {canViewMoney && (
+                      <div className="space-y-2">
+                        <Label>Price ($)</Label>
+                        <Input 
+                          type="number" 
+                          value={editFormData.price}
+                          onChange={(e) => setEditFormData({ ...editFormData, price: e.target.value })}
+                          placeholder="0"
+                          data-testid="input-edit-price"
+                        />
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <Label>Additional Notes</Label>
+                      <Textarea 
+                        value={editFormData.notes}
+                        onChange={(e) => setEditFormData({ ...editFormData, notes: e.target.value })}
+                        placeholder="Any other notes..."
+                        rows={2}
+                        data-testid="input-edit-notes"
+                      />
+                    </div>
+
+                    <div className="flex gap-2 pt-4">
+                      <Button variant="outline" onClick={handleCancelJobEdit} className="flex-1" data-testid="button-cancel-edit">
+                        Cancel
+                      </Button>
+                      <Button onClick={handleSaveJobEdit} className="flex-1" disabled={updateJob.isPending} data-testid="button-save-edit">
+                        {updateJob.isPending ? "Saving..." : "Save Changes"}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
                 <div className="space-y-4 mt-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
@@ -1933,6 +2170,7 @@ export default function Jobs() {
                     </Button>
                   </div>
                 </div>
+                )}
               </ScrollArea>
 
               <DialogFooter className="flex-col sm:flex-row gap-2">

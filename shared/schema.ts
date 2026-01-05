@@ -90,7 +90,8 @@ export const jobs = pgTable("jobs", {
   jobRunId: integer("job_run_id").references(() => jobRuns.id),
   assignedToId: integer("assigned_to_id").references(() => staff.id),
   billingContactId: integer("billing_contact_id"),
-  clientProgramId: integer("client_program_id"), // Link to client's program for treatment tracking
+  clientProgramId: integer("client_program_id"), // Legacy - for client-based programs
+  programTemplateId: integer("program_template_id").references(() => programTemplates.id), // Direct link to program template
   scheduledDate: timestamp("scheduled_date").notNull(),
   scheduledTime: timestamp("scheduled_time"), // Optional specific time for time-sensitive jobs
   estimatedDurationMinutes: integer("estimated_duration_minutes"),
@@ -496,6 +497,8 @@ export const insertJobRunSchema = createInsertSchema(jobRuns).omit({ id: true, c
 export const insertJobSchema = createInsertSchema(jobs).omit({ id: true }).extend({
   scheduledDate: z.union([z.date(), z.string().pipe(z.coerce.date())]),
   scheduledTime: z.union([z.date(), z.string().pipe(z.coerce.date())]).optional().nullable(),
+  programTemplateId: z.number().optional().nullable(),
+  programTier: z.string().optional().nullable(),
 });
 export const insertFeedbackSchema = createInsertSchema(feedback).omit({ id: true, createdAt: true, sentiment: true, aiAnalysis: true });
 export const insertApplicationSchema = createInsertSchema(applications).omit({ id: true });
