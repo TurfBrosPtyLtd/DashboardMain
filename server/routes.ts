@@ -797,6 +797,22 @@ export async function registerRoutes(
     }
   });
 
+  app.put("/api/treatment-program-schedule/:id", async (req, res) => {
+    try {
+      const role = await getCurrentUserRole(req);
+      if (role !== "manager" && role !== "owner") {
+        return res.status(403).json({ message: "Only managers and owners can update treatment schedule" });
+      }
+      const id = Number(req.params.id);
+      const updates = insertTreatmentProgramScheduleSchema.partial().parse(req.body);
+      const updated = await storage.updateTreatmentProgramSchedule(id, updates);
+      if (!updated) return res.status(404).json({ message: "Schedule item not found" });
+      res.json(updated);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
   app.delete("/api/treatment-program-schedule/:id", async (req, res) => {
     try {
       const role = await getCurrentUserRole(req);

@@ -461,6 +461,11 @@ export class DatabaseStorage implements IStorage {
     return newSchedule;
   }
 
+  async updateTreatmentProgramSchedule(id: number, updates: Partial<TreatmentProgramSchedule>): Promise<TreatmentProgramSchedule | undefined> {
+    const [updated] = await db.update(treatmentProgramSchedule).set(updates).where(eq(treatmentProgramSchedule.id, id)).returning();
+    return updated;
+  }
+
   async deleteTreatmentProgramSchedule(id: number): Promise<boolean> {
     await db.delete(treatmentProgramSchedule).where(eq(treatmentProgramSchedule.id, id));
     return true;

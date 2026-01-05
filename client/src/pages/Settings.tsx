@@ -72,11 +72,13 @@ const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "Ju
 function TreatmentProgramScheduleSection({ 
   programId, 
   treatmentTypes, 
-  isManager 
+  isManager,
+  onEdit
 }: { 
   programId: number; 
   treatmentTypes: TreatmentType[]; 
   isManager: boolean;
+  onEdit?: (item: TreatmentProgramSchedule & { treatmentType: TreatmentType }, programId: number) => void;
 }) {
   const { data: program } = useQuery<TreatmentProgramWithSchedule>({ 
     queryKey: ["/api/treatment-programs", programId] 
@@ -116,15 +118,26 @@ function TreatmentProgramScheduleSection({
         )}
       </div>
       {isManager && (
-        <Button 
-          size="icon" 
-          variant="ghost" 
-          className="h-5 w-5"
-          onClick={() => handleDeleteScheduleItem(item.id)}
-          data-testid={`button-delete-schedule-${item.id}`}
-        >
-          <X className="w-3 h-3" />
-        </Button>
+        <div className="flex items-center gap-0.5">
+          <Button 
+            size="icon" 
+            variant="ghost" 
+            className="h-5 w-5"
+            onClick={() => onEdit?.(item, programId)}
+            data-testid={`button-edit-schedule-${item.id}`}
+          >
+            <Pencil className="w-3 h-3" />
+          </Button>
+          <Button 
+            size="icon" 
+            variant="ghost" 
+            className="h-5 w-5"
+            onClick={() => handleDeleteScheduleItem(item.id)}
+            data-testid={`button-delete-schedule-${item.id}`}
+          >
+            <X className="w-3 h-3" />
+          </Button>
+        </div>
       )}
     </div>
   );
@@ -202,6 +215,7 @@ export default function Settings() {
   const [expandedTreatmentProgram, setExpandedTreatmentProgram] = useState<number | null>(null);
   const [addScheduleDialogOpen, setAddScheduleDialogOpen] = useState(false);
   const [selectedTreatmentProgramForSchedule, setSelectedTreatmentProgramForSchedule] = useState<number | null>(null);
+  const [editingScheduleItem, setEditingScheduleItem] = useState<(TreatmentProgramSchedule & { treatmentType: TreatmentType }) | null>(null);
   const [scheduleFormTreatmentTypeId, setScheduleFormTreatmentTypeId] = useState<string>("");
   const [scheduleFormMonth, setScheduleFormMonth] = useState<string>("");
   const [scheduleFormInstructions, setScheduleFormInstructions] = useState<string>("");
@@ -373,6 +387,26 @@ export default function Settings() {
     }
   };
 
+  const resetScheduleForm = () => {
+    setScheduleFormTreatmentTypeId("");
+    setScheduleFormMonth("");
+    setScheduleFormInstructions("");
+    setScheduleFormIsFlexible(false);
+    setScheduleFormVisitNumber("");
+    setEditingScheduleItem(null);
+  };
+
+  const openEditScheduleItem = (item: TreatmentProgramSchedule & { treatmentType: TreatmentType }, programId: number) => {
+    setEditingScheduleItem(item);
+    setSelectedTreatmentProgramForSchedule(programId);
+    setScheduleFormTreatmentTypeId(String(item.treatmentTypeId));
+    setScheduleFormMonth(item.month ? String(item.month) : "");
+    setScheduleFormInstructions(item.instructions || "");
+    setScheduleFormIsFlexible(item.isFlexible || false);
+    setScheduleFormVisitNumber(item.visitNumber ? String(item.visitNumber) : "");
+    setAddScheduleDialogOpen(true);
+  };
+
   const handleAddScheduleItem = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedTreatmentProgramForSchedule) return;
@@ -392,18 +426,19 @@ export default function Settings() {
       visitNumber: scheduleFormVisitNumber ? Number(scheduleFormVisitNumber) : null,
     };
     try {
-      await apiRequest("POST", `/api/treatment-programs/${selectedTreatmentProgramForSchedule}/schedule`, data);
-      toast({ title: "Treatment added to schedule" });
+      if (editingScheduleItem) {
+        await apiRequest("PUT", `/api/treatment-program-schedule/${editingScheduleItem.id}`, data);
+        toast({ title: "Treatment updated" });
+      } else {
+        await apiRequest("POST", `/api/treatment-programs/${selectedTreatmentProgramForSchedule}/schedule`, data);
+        toast({ title: "Treatment added to schedule" });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/treatment-programs", selectedTreatmentProgramForSchedule] });
       setAddScheduleDialogOpen(false);
       setSelectedTreatmentProgramForSchedule(null);
-      setScheduleFormTreatmentTypeId("");
-      setScheduleFormMonth("");
-      setScheduleFormInstructions("");
-      setScheduleFormIsFlexible(false);
-      setScheduleFormVisitNumber("");
+      resetScheduleForm();
     } catch (error) {
-      toast({ title: "Failed to add treatment to schedule", variant: "destructive" });
+      toast({ title: editingScheduleItem ? "Failed to update treatment" : "Failed to add treatment to schedule", variant: "destructive" });
     }
   };
   
@@ -961,6 +996,7 @@ export default function Settings() {
                           programId={program.id}
                           treatmentTypes={treatmentTypes || []}
                           isManager={isManager}
+                          onEdit={openEditScheduleItem}
                         />
                       )}
                     </div>
@@ -974,10 +1010,13 @@ export default function Settings() {
               </CardContent>
             </Card>
 
-            <Dialog open={addScheduleDialogOpen} onOpenChange={setAddScheduleDialogOpen}>
+            <Dialog open={addScheduleDialogOpen} onOpenChange={(open) => {
+              setAddScheduleDialogOpen(open);
+              if (!open) resetScheduleForm();
+            }}>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Add Treatment to Schedule</DialogTitle>
+                  <DialogTitle>{editingScheduleItem ? "Edit Treatment" : "Add Treatment to Schedule"}</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleAddScheduleItem} className="space-y-4">
                   <div className="space-y-2">
@@ -1051,7 +1090,7 @@ export default function Settings() {
                     />
                   </div>
                   <Button type="submit" className="w-full" data-testid="button-submit-schedule-item">
-                    Add to Schedule
+                    {editingScheduleItem ? "Save Changes" : "Add to Schedule"}
                   </Button>
                 </form>
               </DialogContent>
