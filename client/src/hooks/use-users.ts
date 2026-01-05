@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@shared/routes";
 import { useAuth } from "./use-auth";
-import { canViewMoney } from "@shared/schema";
+import { canViewMoney, canViewGateCode } from "@shared/schema";
 
 export function useStaff() {
   return useQuery({
@@ -25,6 +25,7 @@ export function useCurrentStaff() {
     staff: currentStaff,
     role: currentStaff?.role || null,
     canViewMoney: canViewMoney(currentStaff?.role),
+    canViewGateCode: canViewGateCode(currentStaff?.role),
   };
 }
 

@@ -5,13 +5,17 @@ import { useClients } from "@/hooks/use-clients";
 import { useStaff, useCurrentStaff } from "@/hooks/use-users";
 import { useJobRuns, useCreateJobRun, useUpdateJobRun, useDeleteJobRun } from "@/hooks/use-job-runs";
 import { useCrews, useCreateCrew, useUpdateCrew, useDeleteCrew, useAddCrewMember, useRemoveCrewMember, type CrewWithMembers } from "@/hooks/use-crews";
+import { useQuery } from "@tanstack/react-query";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, addDays, isSameDay, isToday } from "date-fns";
-import { MapPin, Clock, Plus, ChevronLeft, ChevronRight, Zap, Trash2, Pencil, Users, AlertCircle } from "lucide-react";
+import { MapPin, Clock, Plus, ChevronLeft, ChevronRight, Zap, Trash2, Pencil, Users, AlertCircle, Scissors } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,7 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Link } from "wouter";
-import type { JobRun, Crew, Staff } from "@shared/schema";
+import type { JobRun, Crew, Staff, Mower, Client } from "@shared/schema";
 import { X } from "lucide-react";
 
 type ViewType = "daily" | "weekly" | "monthly";
@@ -39,10 +43,18 @@ export default function Jobs() {
   const [selectedStaffId, setSelectedStaffId] = useState<string>("");
   const [addJobToRunId, setAddJobToRunId] = useState<number | null>(null);
   
+  const [selectedClientId, setSelectedClientId] = useState<string>("");
+  const [selectedMowerId, setSelectedMowerId] = useState<string>("");
+  const [cutHeightUnit, setCutHeightUnit] = useState<string>("level");
+  const [cutHeightValue, setCutHeightValue] = useState<string>("");
+  const [newJobTasks, setNewJobTasks] = useState<string[]>([]);
+  const [newTaskInput, setNewTaskInput] = useState("");
+  
   const { data: jobs, isLoading } = useJobs();
   const { data: clients } = useClients();
   const { data: staff } = useStaff();
-  const { canViewMoney } = useCurrentStaff();
+  const { canViewMoney, canViewGateCode } = useCurrentStaff();
+  const { data: mowers } = useQuery<Mower[]>({ queryKey: ["/api/mowers"] });
   const { data: jobRuns, refetch: refetchJobRuns } = useJobRuns();
   const { data: crews, refetch: refetchCrews } = useCrews();
   const createJob = useCreateJob();
@@ -56,20 +68,66 @@ export default function Jobs() {
   const addCrewMember = useAddCrewMember();
   const removeCrewMember = useRemoveCrewMember();
 
+  const getSelectedClient = (): Client | undefined => {
+    if (!selectedClientId) return undefined;
+    return clients?.find(c => c.id === Number(selectedClientId));
+  };
+
+  const getProgramTierLabel = (tier: string | undefined): string => {
+    switch (tier) {
+      case "22": return "Essentials (22/yr)";
+      case "24": return "Elite (24/yr)";
+      case "26": return "Prestige (26/yr)";
+      default: return tier || "Not set";
+    }
+  };
+
+  const addTask = () => {
+    if (newTaskInput.trim()) {
+      setNewJobTasks([...newJobTasks, newTaskInput.trim()]);
+      setNewTaskInput("");
+    }
+  };
+
+  const removeTask = (index: number) => {
+    setNewJobTasks(newJobTasks.filter((_, i) => i !== index));
+  };
+
+  const resetNewJobForm = () => {
+    setSelectedClientId("");
+    setSelectedMowerId("");
+    setCutHeightUnit("level");
+    setCutHeightValue("");
+    setNewJobTasks([]);
+    setNewTaskInput("");
+  };
+
   const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const jobRunId = formData.get("jobRunId");
     const priceValue = formData.get("price");
+    const gateCodeValue = formData.get("gateCode") as string;
+    const siteInfoValue = formData.get("siteInformation") as string;
+    const estimatedDuration = formData.get("estimatedDuration");
+    
     await createJob.mutateAsync({
-      clientId: Number(formData.get("clientId")),
+      clientId: Number(selectedClientId),
       assignedToId: formData.get("assignedToId") ? Number(formData.get("assignedToId")) : undefined,
-      scheduledDate: new Date(formData.get("date") as string).toISOString(),
+      scheduledDate: new Date(formData.get("date") as string),
       notes: formData.get("notes") as string,
       status: "scheduled",
       jobRunId: jobRunId && jobRunId !== "none" ? Number(jobRunId) : undefined,
       price: priceValue ? Number(priceValue) : 0,
+      mowerId: selectedMowerId && selectedMowerId !== "none" ? Number(selectedMowerId) : undefined,
+      cutHeightUnit: cutHeightUnit || undefined,
+      cutHeightValue: cutHeightValue || undefined,
+      gateCode: gateCodeValue || undefined,
+      siteInformation: siteInfoValue || undefined,
+      estimatedDurationMinutes: estimatedDuration ? Number(estimatedDuration) : undefined,
+      tasks: newJobTasks.length > 0 ? newJobTasks : undefined,
     });
+    resetNewJobForm();
     setIsCreateOpen(false);
   };
 
@@ -577,75 +635,198 @@ export default function Jobs() {
                 New Job
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-[550px] max-h-[85vh]">
               <DialogHeader>
                 <DialogTitle>Schedule New Job</DialogTitle>
               </DialogHeader>
-              <form onSubmit={handleCreate} className="space-y-4 mt-4">
-                <div className="space-y-2">
-                  <Label htmlFor="client">Client</Label>
-                  <Select name="clientId" required>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select client" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clients?.map(client => (
-                        <SelectItem key={client.id} value={String(client.id)}>{client.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="staff">Assign To</Label>
-                  <Select name="assignedToId">
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select staff member" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {staff?.map(member => (
-                        <SelectItem key={member.id} value={String(member.id)}>{member.name} ({member.role})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="date">Date</Label>
-                  <Input type="date" name="date" required className="rounded-lg" />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="jobRunId">Job Run (optional)</Label>
-                  <Select name="jobRunId">
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select job run" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No job run</SelectItem>
-                      {jobRuns?.map((jr: JobRun) => (
-                        <SelectItem key={jr.id} value={String(jr.id)}>{jr.name} - {format(new Date(jr.date), "MMM d")}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {canViewMoney && (
+              <ScrollArea className="max-h-[70vh] pr-4">
+                <form onSubmit={handleCreate} className="space-y-4 mt-4">
                   <div className="space-y-2">
-                    <Label htmlFor="price">Price ($)</Label>
-                    <Input type="number" name="price" placeholder="0" min="0" className="rounded-lg" />
+                    <Label htmlFor="client">Client</Label>
+                    <Select value={selectedClientId} onValueChange={setSelectedClientId} required>
+                      <SelectTrigger data-testid="select-client">
+                        <SelectValue placeholder="Select client" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {clients?.map(client => (
+                          <SelectItem key={client.id} value={String(client.id)}>{client.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {getSelectedClient() && (
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge variant="secondary" className="text-xs" data-testid="badge-program-tier">
+                          {getProgramTierLabel(getSelectedClient()?.programTier)}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">{getSelectedClient()?.address}</span>
+                      </div>
+                    )}
                   </div>
-                )}
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="date">Date</Label>
+                      <Input type="date" name="date" required className="rounded-lg" data-testid="input-date" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="estimatedDuration">Duration (mins)</Label>
+                      <Input type="number" name="estimatedDuration" placeholder="45" min="5" step="5" className="rounded-lg" data-testid="input-duration" />
+                    </div>
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="notes">Notes</Label>
-                  <Input name="notes" placeholder="Gate code, special instructions..." className="rounded-lg" />
-                </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="staff">Assign To</Label>
+                    <Select name="assignedToId">
+                      <SelectTrigger data-testid="select-staff">
+                        <SelectValue placeholder="Select staff member" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {staff?.map(member => (
+                          <SelectItem key={member.id} value={String(member.id)}>{member.name} ({member.role})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                <Button type="submit" className="w-full bg-primary" disabled={createJob.isPending}>
-                  {createJob.isPending ? "Creating..." : "Schedule Job"}
-                </Button>
-              </form>
+                  <div className="space-y-2">
+                    <Label htmlFor="jobRunId">Job Run (optional)</Label>
+                    <Select name="jobRunId">
+                      <SelectTrigger data-testid="select-jobrun">
+                        <SelectValue placeholder="Select job run" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No job run</SelectItem>
+                        {jobRuns?.map((jr: JobRun) => (
+                          <SelectItem key={jr.id} value={String(jr.id)}>{jr.name} - {format(new Date(jr.date), "MMM d")}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="border-t pt-4 space-y-3">
+                    <h4 className="font-medium text-sm flex items-center gap-2">
+                      <Scissors className="w-4 h-4" />
+                      Equipment & Settings
+                    </h4>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="mower">Mower</Label>
+                      <Select value={selectedMowerId} onValueChange={setSelectedMowerId}>
+                        <SelectTrigger data-testid="select-mower">
+                          <SelectValue placeholder="Select mower" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No mower selected</SelectItem>
+                          {mowers?.filter(m => m.isActive).map(mower => (
+                            <SelectItem key={mower.id} value={String(mower.id)}>
+                              {mower.name} ({mower.mowerType.replace('_', ' ')})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="cutHeightUnit">Cut Height Unit</Label>
+                        <Select value={cutHeightUnit} onValueChange={setCutHeightUnit}>
+                          <SelectTrigger data-testid="select-cut-unit">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="level">Level (1-7)</SelectItem>
+                            <SelectItem value="millimeter">Millimeters</SelectItem>
+                            <SelectItem value="inch">Inches</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="cutHeightValue">Cut Height</Label>
+                        <Input 
+                          type={cutHeightUnit === "level" ? "number" : "text"}
+                          value={cutHeightValue}
+                          onChange={(e) => setCutHeightValue(e.target.value)}
+                          placeholder={cutHeightUnit === "level" ? "4" : cutHeightUnit === "millimeter" ? "50mm" : "2\""}
+                          min={cutHeightUnit === "level" ? "1" : undefined}
+                          max={cutHeightUnit === "level" ? "7" : undefined}
+                          className="rounded-lg"
+                          data-testid="input-cut-height"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border-t pt-4 space-y-3">
+                    <h4 className="font-medium text-sm flex items-center gap-2">
+                      <MapPin className="w-4 h-4" />
+                      Site Information
+                    </h4>
+
+                    {canViewGateCode && (
+                      <div className="space-y-2">
+                        <Label htmlFor="gateCode">Gate Code</Label>
+                        <Input name="gateCode" placeholder="Enter gate code" className="rounded-lg" data-testid="input-gate-code" />
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <Label htmlFor="siteInformation">Site Notes</Label>
+                      <Textarea 
+                        name="siteInformation" 
+                        placeholder="Special access instructions, hazards, dog on property..." 
+                        className="rounded-lg resize-none" 
+                        rows={2}
+                        data-testid="input-site-info"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="border-t pt-4 space-y-3">
+                    <h4 className="font-medium text-sm">Task Checklist</h4>
+                    <div className="flex gap-2">
+                      <Input 
+                        value={newTaskInput}
+                        onChange={(e) => setNewTaskInput(e.target.value)}
+                        placeholder="Add a task..."
+                        className="rounded-lg flex-1"
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTask())}
+                        data-testid="input-new-task"
+                      />
+                      <Button type="button" variant="outline" size="icon" onClick={addTask} data-testid="button-add-task">
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    {newJobTasks.length > 0 && (
+                      <div className="space-y-1">
+                        {newJobTasks.map((task, idx) => (
+                          <div key={idx} className="flex items-center justify-between bg-muted px-3 py-2 rounded-lg text-sm">
+                            <span data-testid={`task-item-${idx}`}>{task}</span>
+                            <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeTask(idx)} data-testid={`button-remove-task-${idx}`}>
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {canViewMoney && (
+                    <div className="space-y-2 border-t pt-4">
+                      <Label htmlFor="price">Price ($)</Label>
+                      <Input type="number" name="price" placeholder="0" min="0" className="rounded-lg" data-testid="input-price" />
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="notes">Additional Notes</Label>
+                    <Textarea name="notes" placeholder="Any other notes..." className="rounded-lg resize-none" rows={2} data-testid="input-notes" />
+                  </div>
+
+                  <Button type="submit" className="w-full bg-primary" disabled={createJob.isPending || !selectedClientId} data-testid="button-create-job">
+                    {createJob.isPending ? "Creating..." : "Schedule Job"}
+                  </Button>
+                </form>
+              </ScrollArea>
             </DialogContent>
           </Dialog>
 
@@ -937,7 +1118,7 @@ export default function Jobs() {
             await createJob.mutateAsync({
               clientId: Number(formData.get("clientId")),
               assignedToId: formData.get("assignedToId") ? Number(formData.get("assignedToId")) : undefined,
-              scheduledDate: targetRun ? new Date(targetRun.date).toISOString() : new Date().toISOString(),
+              scheduledDate: targetRun ? new Date(targetRun.date) : new Date(),
               notes: formData.get("notes") as string || "",
               status: "scheduled",
               jobRunId: addJobToRunId!,

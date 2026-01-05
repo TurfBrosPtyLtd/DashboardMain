@@ -241,7 +241,11 @@ export async function registerRoutes(
       const role = await getCurrentUserRole(req);
       const canViewPrice = canViewMoney(role);
       const canViewGate = canViewGateCode(role);
-      let input = api.jobs.create.input.parse(req.body);
+      
+      // Extract tasks from request body (not part of job schema)
+      const { tasks, ...jobData } = req.body;
+      
+      let input = api.jobs.create.input.parse(jobData);
       // Strip price if user doesn't have permission
       if (!canViewPrice) {
         input = { ...input, price: 0 };
@@ -251,6 +255,19 @@ export async function registerRoutes(
         input = { ...input, gateCode: null };
       }
       const job = await storage.createJob(input);
+      
+      // Create job tasks if provided
+      if (tasks && Array.isArray(tasks) && tasks.length > 0) {
+        for (let i = 0; i < tasks.length; i++) {
+          await storage.createJobTask({
+            jobId: job.id,
+            description: tasks[i],
+            sortOrder: i,
+            isCompleted: false,
+          });
+        }
+      }
+      
       res.status(201).json(sanitizeJobData(job, canViewPrice, canViewGate));
     } catch (err) {
       res.status(400).json({ message: "Invalid input" });

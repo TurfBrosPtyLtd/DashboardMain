@@ -446,6 +446,7 @@ export type InsertCrewMember = z.infer<typeof insertCrewMemberSchema>;
 export type JobRun = typeof jobRuns.$inferSelect;
 export type InsertJobRun = z.infer<typeof insertJobRunSchema>;
 export type Job = typeof jobs.$inferSelect;
+export type InsertJob = z.infer<typeof insertJobSchema>;
 export type Feedback = typeof feedback.$inferSelect;
 export type Application = typeof applications.$inferSelect;
 

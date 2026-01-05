@@ -1,5 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, buildUrl, type InsertJob } from "@shared/routes";
+import { api, buildUrl } from "@shared/routes";
+import type { InsertJob } from "@shared/schema";
+
+type CreateJobInput = InsertJob & { tasks?: string[] };
 
 export function useJobs(filters?: { assignedToId?: number; status?: string; date?: string }) {
   // Construct URL with optional query params if filters exist
@@ -41,7 +44,7 @@ export function useJob(id: number) {
 export function useCreateJob() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: InsertJob) => {
+    mutationFn: async (data: CreateJobInput) => {
       const res = await fetch(api.jobs.create.path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
