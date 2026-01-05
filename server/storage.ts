@@ -1,12 +1,25 @@
 import { db } from "./db";
 import {
   staff, clients, crews, crewMembers, jobRuns, jobs, feedback, applications,
+  clientContacts, mowers, staffMowerFavorites, jobTasks,
+  treatmentTypes, programTemplates, programTemplateTreatments,
+  clientPrograms, clientProgramServices, clientProgramTreatments,
   type Staff, type InsertStaff,
   type Client, type InsertStaff as InsertClient,
   type Crew, type InsertCrew, type UpdateCrew,
   type CrewMember, type InsertCrewMember,
   type JobRun, type InsertJobRun,
-  type Job, type Feedback, type Application
+  type Job, type Feedback, type Application,
+  type ClientContact, type InsertClientContact,
+  type Mower, type InsertMower,
+  type StaffMowerFavorite, type InsertStaffMowerFavorite,
+  type JobTask, type InsertJobTask,
+  type TreatmentType, type InsertTreatmentType,
+  type ProgramTemplate, type InsertProgramTemplate,
+  type ProgramTemplateTreatment, type InsertProgramTemplateTreatment,
+  type ClientProgram, type InsertClientProgram,
+  type ClientProgramService, type InsertClientProgramService,
+  type ClientProgramTreatment, type InsertClientProgramTreatment
 } from "@shared/schema";
 import { eq, and, desc, gte, lt } from "drizzle-orm";
 
@@ -23,6 +36,12 @@ export interface IStorage {
   getClient(id: number): Promise<Client | undefined>;
   createClient(client: any): Promise<Client>;
 
+  // Client Contacts
+  getClientContacts(clientId: number): Promise<ClientContact[]>;
+  createClientContact(contact: InsertClientContact): Promise<ClientContact>;
+  updateClientContact(id: number, updates: Partial<ClientContact>): Promise<ClientContact | undefined>;
+  deleteClientContact(id: number): Promise<boolean>;
+
   // Crews
   getCrews(): Promise<(Crew & { members: (CrewMember & { staff: Staff })[] })[]>;
   createCrew(crew: InsertCrew): Promise<Crew>;
@@ -30,6 +49,17 @@ export interface IStorage {
   deleteCrew(id: number): Promise<boolean>;
   addCrewMember(crewId: number, staffId: number): Promise<CrewMember>;
   removeCrewMember(crewId: number, staffId: number): Promise<boolean>;
+
+  // Mowers
+  getMowers(): Promise<Mower[]>;
+  getMower(id: number): Promise<Mower | undefined>;
+  createMower(mower: InsertMower): Promise<Mower>;
+  updateMower(id: number, updates: Partial<Mower>): Promise<Mower | undefined>;
+
+  // Mower Favorites
+  getMowerFavorites(staffId: number): Promise<(StaffMowerFavorite & { mower: Mower })[]>;
+  addMowerFavorite(staffId: number, mowerId: number): Promise<StaffMowerFavorite>;
+  removeMowerFavorite(staffId: number, mowerId: number): Promise<boolean>;
 
   // Job Runs
   getJobRuns(date?: string): Promise<JobRun[]>;
@@ -39,9 +69,15 @@ export interface IStorage {
 
   // Jobs
   getJobs(filters?: { assignedToId?: number; status?: string; date?: string }): Promise<(Job & { client: Client })[]>;
-  getJob(id: number): Promise<(Job & { client: Client, applications: Application[] }) | undefined>;
+  getJob(id: number): Promise<(Job & { client: Client, applications: Application[], tasks: JobTask[] }) | undefined>;
   createJob(job: any): Promise<Job>;
   updateJob(id: number, updates: any): Promise<Job>;
+
+  // Job Tasks
+  getJobTasks(jobId: number): Promise<JobTask[]>;
+  createJobTask(task: InsertJobTask): Promise<JobTask>;
+  updateJobTask(id: number, updates: Partial<JobTask>): Promise<JobTask | undefined>;
+  deleteJobTask(id: number): Promise<boolean>;
 
   // Feedback
   createFeedback(feedback: any): Promise<Feedback>;
@@ -49,6 +85,30 @@ export interface IStorage {
 
   // Applications
   createApplication(app: any): Promise<Application>;
+
+  // Treatment Types
+  getTreatmentTypes(): Promise<TreatmentType[]>;
+  createTreatmentType(type: InsertTreatmentType): Promise<TreatmentType>;
+  updateTreatmentType(id: number, updates: Partial<TreatmentType>): Promise<TreatmentType | undefined>;
+
+  // Program Templates
+  getProgramTemplates(): Promise<ProgramTemplate[]>;
+  getProgramTemplate(id: number): Promise<(ProgramTemplate & { treatments: (ProgramTemplateTreatment & { treatmentType: TreatmentType })[] }) | undefined>;
+  createProgramTemplate(template: InsertProgramTemplate): Promise<ProgramTemplate>;
+  updateProgramTemplate(id: number, updates: Partial<ProgramTemplate>): Promise<ProgramTemplate | undefined>;
+
+  // Program Template Treatments
+  createProgramTemplateTreatment(treatment: InsertProgramTemplateTreatment): Promise<ProgramTemplateTreatment>;
+  deleteProgramTemplateTreatment(id: number): Promise<boolean>;
+
+  // Client Programs
+  getClientPrograms(clientId: number): Promise<(ClientProgram & { template: ProgramTemplate })[]>;
+  createClientProgram(program: InsertClientProgram): Promise<ClientProgram>;
+  updateClientProgram(id: number, updates: Partial<ClientProgram>): Promise<ClientProgram | undefined>;
+
+  // Client Program Treatments
+  getClientProgramTreatments(clientProgramId: number): Promise<(ClientProgramTreatment & { treatmentType: TreatmentType })[]>;
+  updateClientProgramTreatment(id: number, updates: Partial<ClientProgramTreatment>): Promise<ClientProgramTreatment | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -173,12 +233,13 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getJob(id: number): Promise<(Job & { client: Client, applications: Application[] }) | undefined> {
+  async getJob(id: number): Promise<(Job & { client: Client, applications: Application[], tasks: JobTask[] }) | undefined> {
     return await db.query.jobs.findFirst({
       where: eq(jobs.id, id),
       with: {
         client: true,
         applications: true,
+        tasks: true,
       }
     });
   }
@@ -209,6 +270,169 @@ export class DatabaseStorage implements IStorage {
   async createApplication(appData: any): Promise<Application> {
     const [newApp] = await db.insert(applications).values(appData).returning();
     return newApp;
+  }
+
+  // Client Contacts
+  async getClientContacts(clientId: number): Promise<ClientContact[]> {
+    return await db.select().from(clientContacts).where(eq(clientContacts.clientId, clientId));
+  }
+
+  async createClientContact(contact: InsertClientContact): Promise<ClientContact> {
+    const [newContact] = await db.insert(clientContacts).values(contact).returning();
+    return newContact;
+  }
+
+  async updateClientContact(id: number, updates: Partial<ClientContact>): Promise<ClientContact | undefined> {
+    const [updated] = await db.update(clientContacts).set(updates).where(eq(clientContacts.id, id)).returning();
+    return updated;
+  }
+
+  async deleteClientContact(id: number): Promise<boolean> {
+    await db.delete(clientContacts).where(eq(clientContacts.id, id));
+    return true;
+  }
+
+  // Mowers
+  async getMowers(): Promise<Mower[]> {
+    return await db.select().from(mowers).where(eq(mowers.isActive, true));
+  }
+
+  async getMower(id: number): Promise<Mower | undefined> {
+    const [mower] = await db.select().from(mowers).where(eq(mowers.id, id));
+    return mower;
+  }
+
+  async createMower(mower: InsertMower): Promise<Mower> {
+    const [newMower] = await db.insert(mowers).values(mower).returning();
+    return newMower;
+  }
+
+  async updateMower(id: number, updates: Partial<Mower>): Promise<Mower | undefined> {
+    const [updated] = await db.update(mowers).set(updates).where(eq(mowers.id, id)).returning();
+    return updated;
+  }
+
+  // Mower Favorites
+  async getMowerFavorites(staffId: number): Promise<(StaffMowerFavorite & { mower: Mower })[]> {
+    return await db.query.staffMowerFavorites.findMany({
+      where: eq(staffMowerFavorites.staffId, staffId),
+      with: { mower: true }
+    });
+  }
+
+  async addMowerFavorite(staffId: number, mowerId: number): Promise<StaffMowerFavorite> {
+    const [fav] = await db.insert(staffMowerFavorites).values({ staffId, mowerId }).returning();
+    return fav;
+  }
+
+  async removeMowerFavorite(staffId: number, mowerId: number): Promise<boolean> {
+    await db.delete(staffMowerFavorites).where(
+      and(eq(staffMowerFavorites.staffId, staffId), eq(staffMowerFavorites.mowerId, mowerId))
+    );
+    return true;
+  }
+
+  // Job Tasks
+  async getJobTasks(jobId: number): Promise<JobTask[]> {
+    return await db.select().from(jobTasks).where(eq(jobTasks.jobId, jobId));
+  }
+
+  async createJobTask(task: InsertJobTask): Promise<JobTask> {
+    const [newTask] = await db.insert(jobTasks).values(task).returning();
+    return newTask;
+  }
+
+  async updateJobTask(id: number, updates: Partial<JobTask>): Promise<JobTask | undefined> {
+    const [updated] = await db.update(jobTasks).set(updates).where(eq(jobTasks.id, id)).returning();
+    return updated;
+  }
+
+  async deleteJobTask(id: number): Promise<boolean> {
+    await db.delete(jobTasks).where(eq(jobTasks.id, id));
+    return true;
+  }
+
+  // Treatment Types
+  async getTreatmentTypes(): Promise<TreatmentType[]> {
+    return await db.select().from(treatmentTypes).where(eq(treatmentTypes.isActive, true));
+  }
+
+  async createTreatmentType(type: InsertTreatmentType): Promise<TreatmentType> {
+    const [newType] = await db.insert(treatmentTypes).values(type).returning();
+    return newType;
+  }
+
+  async updateTreatmentType(id: number, updates: Partial<TreatmentType>): Promise<TreatmentType | undefined> {
+    const [updated] = await db.update(treatmentTypes).set(updates).where(eq(treatmentTypes.id, id)).returning();
+    return updated;
+  }
+
+  // Program Templates
+  async getProgramTemplates(): Promise<ProgramTemplate[]> {
+    return await db.select().from(programTemplates).where(eq(programTemplates.isActive, true));
+  }
+
+  async getProgramTemplate(id: number): Promise<(ProgramTemplate & { treatments: (ProgramTemplateTreatment & { treatmentType: TreatmentType })[] }) | undefined> {
+    return await db.query.programTemplates.findFirst({
+      where: eq(programTemplates.id, id),
+      with: {
+        treatments: {
+          with: { treatmentType: true }
+        }
+      }
+    });
+  }
+
+  async createProgramTemplate(template: InsertProgramTemplate): Promise<ProgramTemplate> {
+    const [newTemplate] = await db.insert(programTemplates).values(template).returning();
+    return newTemplate;
+  }
+
+  async updateProgramTemplate(id: number, updates: Partial<ProgramTemplate>): Promise<ProgramTemplate | undefined> {
+    const [updated] = await db.update(programTemplates).set(updates).where(eq(programTemplates.id, id)).returning();
+    return updated;
+  }
+
+  // Program Template Treatments
+  async createProgramTemplateTreatment(treatment: InsertProgramTemplateTreatment): Promise<ProgramTemplateTreatment> {
+    const [newTreatment] = await db.insert(programTemplateTreatments).values(treatment).returning();
+    return newTreatment;
+  }
+
+  async deleteProgramTemplateTreatment(id: number): Promise<boolean> {
+    await db.delete(programTemplateTreatments).where(eq(programTemplateTreatments.id, id));
+    return true;
+  }
+
+  // Client Programs
+  async getClientPrograms(clientId: number): Promise<(ClientProgram & { template: ProgramTemplate })[]> {
+    return await db.query.clientPrograms.findMany({
+      where: eq(clientPrograms.clientId, clientId),
+      with: { template: true }
+    });
+  }
+
+  async createClientProgram(program: InsertClientProgram): Promise<ClientProgram> {
+    const [newProgram] = await db.insert(clientPrograms).values(program).returning();
+    return newProgram;
+  }
+
+  async updateClientProgram(id: number, updates: Partial<ClientProgram>): Promise<ClientProgram | undefined> {
+    const [updated] = await db.update(clientPrograms).set(updates).where(eq(clientPrograms.id, id)).returning();
+    return updated;
+  }
+
+  // Client Program Treatments
+  async getClientProgramTreatments(clientProgramId: number): Promise<(ClientProgramTreatment & { treatmentType: TreatmentType })[]> {
+    return await db.query.clientProgramTreatments.findMany({
+      where: eq(clientProgramTreatments.clientProgramId, clientProgramId),
+      with: { treatmentType: true }
+    });
+  }
+
+  async updateClientProgramTreatment(id: number, updates: Partial<ClientProgramTreatment>): Promise<ClientProgramTreatment | undefined> {
+    const [updated] = await db.update(clientProgramTreatments).set(updates).where(eq(clientProgramTreatments.id, id)).returning();
+    return updated;
   }
 }
 

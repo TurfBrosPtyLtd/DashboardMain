@@ -38,12 +38,23 @@ Preferred communication style: Simple, everyday language.
 - **Protected Routes**: AuthGuard component wraps authenticated pages
 
 ### Key Data Models
-- **Staff**: Team members linked to auth users, with roles (admin/staff)
+- **Staff**: Team members linked to auth users, with roles (crew_member, staff, team_leader, manager, owner)
 - **Clients**: Customer records with address, contact info, program tier, and coordinates
+- **Client Contacts**: Separate billing and service contacts for each client
 - **Job Runs**: Daily scheduling containers that group multiple jobs
-- **Jobs**: Individual service appointments linked to clients and optionally to job runs
+- **Jobs**: Individual service appointments with mower selection, cut height (levels/mm/inches), gate codes, site info, estimated duration, and task checklists
+- **Job Tasks**: Checklist items for work to be done/completed on each job
+- **Mowers**: Equipment catalog with types (push, self_propelled, stand_on, ride_on, robot) and staff favorites
 - **Feedback**: Client ratings and comments with AI-powered sentiment analysis
 - **Applications**: Ancillary services tracking (products used, quantities, compliance notes)
+- **Treatment Types**: Lawn treatments (soil wetter, fertilizers, aeration, irrigation, soil test, pest control)
+- **Program Templates**: Service tier templates (Essentials 22/yr, Elite 24/yr, Prestige 26/yr) with monthly service distribution
+- **Client Programs**: Programs assigned to clients with customized schedules and treatment tracking
+
+### Role-Based Access Control
+- **Gate Code Visibility**: Only team_leader, manager, owner can view gate codes
+- **Price/Revenue Visibility**: Only team_leader, manager, owner can view job prices
+- **Management Functions**: Only manager, owner can create/edit mowers, treatment types, program templates
 
 ### AI Integrations
 - **OpenAI**: Used for feedback sentiment analysis and chat functionality

@@ -2,11 +2,16 @@ import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
-import { insertJobRunSchema, insertCrewSchema, updateCrewSchema, canViewMoney } from "@shared/schema";
+import { 
+  insertJobRunSchema, insertCrewSchema, updateCrewSchema, canViewMoney, canViewGateCode,
+  insertClientContactSchema, insertMowerSchema, insertJobTaskSchema,
+  insertTreatmentTypeSchema, insertProgramTemplateSchema, insertProgramTemplateTreatmentSchema,
+  insertClientProgramSchema
+} from "@shared/schema";
 import { z } from "zod";
 import OpenAI from "openai";
 
-// Helper to get current user's staff role
+// Helper to get current user's staff role and ID
 async function getCurrentUserRole(req: Request): Promise<string | null> {
   const userId = (req as any).user?.claims?.sub;
   if (!userId) return null;
@@ -14,12 +19,27 @@ async function getCurrentUserRole(req: Request): Promise<string | null> {
   return staffMember?.role || null;
 }
 
+async function getCurrentStaffId(req: Request): Promise<number | null> {
+  const userId = (req as any).user?.claims?.sub;
+  if (!userId) return null;
+  const staffMember = await storage.getStaffByUserId(userId);
+  return staffMember?.id || null;
+}
+
 // Helper to sanitize job data (remove price for unauthorized users)
-function sanitizeJobData<T extends { price?: number | null }>(job: T, canView: boolean): T {
-  if (!canView) {
-    return { ...job, price: null };
+function sanitizeJobData<T extends { price?: number | null; gateCode?: string | null }>(
+  job: T, 
+  canViewPrice: boolean,
+  canViewGate: boolean
+): T {
+  let result = job;
+  if (!canViewPrice) {
+    result = { ...result, price: null };
   }
-  return job;
+  if (!canViewGate) {
+    result = { ...result, gateCode: null };
+  }
+  return result;
 }
 
 const openai = new OpenAI({ apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || "dummy" });
@@ -206,26 +226,32 @@ export async function registerRoutes(
   // Jobs
   app.get(api.jobs.list.path, async (req, res) => {
     const role = await getCurrentUserRole(req);
-    const canView = canViewMoney(role);
+    const canViewPrice = canViewMoney(role);
+    const canViewGate = canViewGateCode(role);
     const filters = {
       assignedToId: req.query.assignedToId ? Number(req.query.assignedToId) : undefined,
       status: req.query.status as string,
     };
     const jobsList = await storage.getJobs(filters);
-    res.json(jobsList.map(job => sanitizeJobData(job, canView)));
+    res.json(jobsList.map(job => sanitizeJobData(job, canViewPrice, canViewGate)));
   });
 
   app.post(api.jobs.create.path, async (req, res) => {
     try {
       const role = await getCurrentUserRole(req);
-      const canView = canViewMoney(role);
+      const canViewPrice = canViewMoney(role);
+      const canViewGate = canViewGateCode(role);
       let input = api.jobs.create.input.parse(req.body);
       // Strip price if user doesn't have permission
-      if (!canView) {
+      if (!canViewPrice) {
         input = { ...input, price: 0 };
       }
+      // Strip gate code if user doesn't have permission
+      if (!canViewGate) {
+        input = { ...input, gateCode: null };
+      }
       const job = await storage.createJob(input);
-      res.status(201).json(sanitizeJobData(job, canView));
+      res.status(201).json(sanitizeJobData(job, canViewPrice, canViewGate));
     } catch (err) {
       res.status(400).json({ message: "Invalid input" });
     }
@@ -234,14 +260,19 @@ export async function registerRoutes(
   app.put(api.jobs.update.path, async (req, res) => {
     try {
       const role = await getCurrentUserRole(req);
-      const canView = canViewMoney(role);
+      const canViewPrice = canViewMoney(role);
+      const canViewGate = canViewGateCode(role);
       let input = api.jobs.update.input.parse(req.body);
       // Strip price if user doesn't have permission
-      if (!canView) {
+      if (!canViewPrice) {
         delete input.price;
       }
+      // Strip gate code if user doesn't have permission
+      if (!canViewGate) {
+        delete input.gateCode;
+      }
       const job = await storage.updateJob(Number(req.params.id), input);
-      res.json(sanitizeJobData(job, canView));
+      res.json(sanitizeJobData(job, canViewPrice, canViewGate));
     } catch (err) {
       res.status(400).json({ message: "Invalid input" });
     }
@@ -249,10 +280,11 @@ export async function registerRoutes(
 
   app.get(api.jobs.get.path, async (req, res) => {
     const role = await getCurrentUserRole(req);
-    const canView = canViewMoney(role);
+    const canViewPrice = canViewMoney(role);
+    const canViewGate = canViewGateCode(role);
     const job = await storage.getJob(Number(req.params.id));
     if (!job) return res.status(404).json({ message: "Job not found" });
-    res.json(sanitizeJobData(job, canView));
+    res.json(sanitizeJobData(job, canViewPrice, canViewGate));
   });
 
   // Feedback with AI Analysis
@@ -310,6 +342,330 @@ export async function registerRoutes(
     }
   });
 
+  // Client Contacts
+  app.get("/api/clients/:id/contacts", async (req, res) => {
+    try {
+      const clientId = Number(req.params.id);
+      const contacts = await storage.getClientContacts(clientId);
+      res.json(contacts);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid client ID" });
+    }
+  });
+
+  app.post("/api/clients/:id/contacts", async (req, res) => {
+    try {
+      const clientId = Number(req.params.id);
+      const input = insertClientContactSchema.parse({ ...req.body, clientId });
+      const contact = await storage.createClientContact(input);
+      res.status(201).json(contact);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  app.put("/api/contacts/:id", async (req, res) => {
+    try {
+      const contactId = Number(req.params.id);
+      const contact = await storage.updateClientContact(contactId, req.body);
+      if (!contact) return res.status(404).json({ message: "Contact not found" });
+      res.json(contact);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  app.delete("/api/contacts/:id", async (req, res) => {
+    try {
+      const contactId = Number(req.params.id);
+      await storage.deleteClientContact(contactId);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(400).json({ message: "Invalid contact ID" });
+    }
+  });
+
+  // Mowers
+  app.get("/api/mowers", async (req, res) => {
+    const mowerList = await storage.getMowers();
+    res.json(mowerList);
+  });
+
+  app.post("/api/mowers", async (req, res) => {
+    try {
+      const role = await getCurrentUserRole(req);
+      if (role !== "manager" && role !== "owner") {
+        return res.status(403).json({ message: "Only managers and owners can create mowers" });
+      }
+      const input = insertMowerSchema.parse(req.body);
+      const mower = await storage.createMower(input);
+      res.status(201).json(mower);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  app.put("/api/mowers/:id", async (req, res) => {
+    try {
+      const role = await getCurrentUserRole(req);
+      if (role !== "manager" && role !== "owner") {
+        return res.status(403).json({ message: "Only managers and owners can update mowers" });
+      }
+      const mowerId = Number(req.params.id);
+      const mower = await storage.updateMower(mowerId, req.body);
+      if (!mower) return res.status(404).json({ message: "Mower not found" });
+      res.json(mower);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  // Mower Favorites
+  app.get("/api/mowers/favorites", async (req, res) => {
+    try {
+      const staffId = await getCurrentStaffId(req);
+      if (!staffId) return res.status(401).json({ message: "Not authenticated" });
+      const favorites = await storage.getMowerFavorites(staffId);
+      res.json(favorites);
+    } catch (err) {
+      res.status(400).json({ message: "Error fetching favorites" });
+    }
+  });
+
+  app.post("/api/mowers/:id/favorite", async (req, res) => {
+    try {
+      const staffId = await getCurrentStaffId(req);
+      if (!staffId) return res.status(401).json({ message: "Not authenticated" });
+      const mowerId = Number(req.params.id);
+      const favorite = await storage.addMowerFavorite(staffId, mowerId);
+      res.status(201).json(favorite);
+    } catch (err) {
+      res.status(400).json({ message: "Error adding favorite" });
+    }
+  });
+
+  app.delete("/api/mowers/:id/favorite", async (req, res) => {
+    try {
+      const staffId = await getCurrentStaffId(req);
+      if (!staffId) return res.status(401).json({ message: "Not authenticated" });
+      const mowerId = Number(req.params.id);
+      await storage.removeMowerFavorite(staffId, mowerId);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(400).json({ message: "Error removing favorite" });
+    }
+  });
+
+  // Job Tasks
+  app.get("/api/jobs/:id/tasks", async (req, res) => {
+    try {
+      const jobId = Number(req.params.id);
+      const tasks = await storage.getJobTasks(jobId);
+      res.json(tasks);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid job ID" });
+    }
+  });
+
+  app.post("/api/jobs/:id/tasks", async (req, res) => {
+    try {
+      const jobId = Number(req.params.id);
+      const input = insertJobTaskSchema.parse({ ...req.body, jobId });
+      const task = await storage.createJobTask(input);
+      res.status(201).json(task);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  app.put("/api/tasks/:id", async (req, res) => {
+    try {
+      const taskId = Number(req.params.id);
+      const staffId = await getCurrentStaffId(req);
+      const updates = { ...req.body };
+      if (req.body.isCompleted && !req.body.completedById) {
+        updates.completedById = staffId;
+        updates.completedAt = new Date();
+      }
+      const task = await storage.updateJobTask(taskId, updates);
+      if (!task) return res.status(404).json({ message: "Task not found" });
+      res.json(task);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  app.delete("/api/tasks/:id", async (req, res) => {
+    try {
+      const taskId = Number(req.params.id);
+      await storage.deleteJobTask(taskId);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(400).json({ message: "Invalid task ID" });
+    }
+  });
+
+  // Treatment Types
+  app.get("/api/treatment-types", async (req, res) => {
+    const types = await storage.getTreatmentTypes();
+    res.json(types);
+  });
+
+  app.post("/api/treatment-types", async (req, res) => {
+    try {
+      const role = await getCurrentUserRole(req);
+      if (role !== "manager" && role !== "owner") {
+        return res.status(403).json({ message: "Only managers and owners can create treatment types" });
+      }
+      const input = insertTreatmentTypeSchema.parse(req.body);
+      const type = await storage.createTreatmentType(input);
+      res.status(201).json(type);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  // Program Templates
+  app.get("/api/program-templates", async (req, res) => {
+    const templates = await storage.getProgramTemplates();
+    res.json(templates);
+  });
+
+  app.get("/api/program-templates/:id", async (req, res) => {
+    try {
+      const templateId = Number(req.params.id);
+      const template = await storage.getProgramTemplate(templateId);
+      if (!template) return res.status(404).json({ message: "Template not found" });
+      res.json(template);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid template ID" });
+    }
+  });
+
+  app.post("/api/program-templates", async (req, res) => {
+    try {
+      const role = await getCurrentUserRole(req);
+      if (role !== "manager" && role !== "owner") {
+        return res.status(403).json({ message: "Only managers and owners can create program templates" });
+      }
+      const body = { ...req.body };
+      if (Array.isArray(body.servicesPerMonth)) {
+        body.servicesPerMonth = JSON.stringify(body.servicesPerMonth);
+      }
+      const input = insertProgramTemplateSchema.parse(body);
+      const template = await storage.createProgramTemplate(input);
+      res.status(201).json(template);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  app.put("/api/program-templates/:id", async (req, res) => {
+    try {
+      const role = await getCurrentUserRole(req);
+      if (role !== "manager" && role !== "owner") {
+        return res.status(403).json({ message: "Only managers and owners can update program templates" });
+      }
+      const templateId = Number(req.params.id);
+      const template = await storage.updateProgramTemplate(templateId, req.body);
+      if (!template) return res.status(404).json({ message: "Template not found" });
+      res.json(template);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  // Program Template Treatments
+  app.post("/api/program-templates/:id/treatments", async (req, res) => {
+    try {
+      const role = await getCurrentUserRole(req);
+      if (role !== "manager" && role !== "owner") {
+        return res.status(403).json({ message: "Only managers and owners can add treatments" });
+      }
+      const templateId = Number(req.params.id);
+      const input = insertProgramTemplateTreatmentSchema.parse({ ...req.body, programTemplateId: templateId });
+      const treatment = await storage.createProgramTemplateTreatment(input);
+      res.status(201).json(treatment);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  app.delete("/api/program-template-treatments/:id", async (req, res) => {
+    try {
+      const role = await getCurrentUserRole(req);
+      if (role !== "manager" && role !== "owner") {
+        return res.status(403).json({ message: "Only managers and owners can remove treatments" });
+      }
+      const treatmentId = Number(req.params.id);
+      await storage.deleteProgramTemplateTreatment(treatmentId);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(400).json({ message: "Invalid treatment ID" });
+    }
+  });
+
+  // Client Programs
+  app.get("/api/clients/:id/programs", async (req, res) => {
+    try {
+      const clientId = Number(req.params.id);
+      const programs = await storage.getClientPrograms(clientId);
+      res.json(programs);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid client ID" });
+    }
+  });
+
+  app.post("/api/clients/:id/programs", async (req, res) => {
+    try {
+      const clientId = Number(req.params.id);
+      const input = insertClientProgramSchema.parse({ ...req.body, clientId });
+      const program = await storage.createClientProgram(input);
+      res.status(201).json(program);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  app.put("/api/client-programs/:id", async (req, res) => {
+    try {
+      const programId = Number(req.params.id);
+      const program = await storage.updateClientProgram(programId, req.body);
+      if (!program) return res.status(404).json({ message: "Program not found" });
+      res.json(program);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  // Client Program Treatments
+  app.get("/api/client-programs/:id/treatments", async (req, res) => {
+    try {
+      const programId = Number(req.params.id);
+      const treatments = await storage.getClientProgramTreatments(programId);
+      res.json(treatments);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid program ID" });
+    }
+  });
+
+  app.put("/api/client-program-treatments/:id", async (req, res) => {
+    try {
+      const treatmentId = Number(req.params.id);
+      const staffId = await getCurrentStaffId(req);
+      const updates = { ...req.body };
+      if (req.body.status === "completed" && !req.body.completedById) {
+        updates.completedById = staffId;
+        updates.completedAt = new Date();
+      }
+      const treatment = await storage.updateClientProgramTreatment(treatmentId, updates);
+      if (!treatment) return res.status(404).json({ message: "Treatment not found" });
+      res.json(treatment);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
   // Seed Data
   try {
     const staffList = await storage.getStaffList();
@@ -340,6 +696,58 @@ export async function registerRoutes(
       });
       
       console.log("Seeding complete.");
+    }
+
+    // Seed mowers if empty
+    const mowerList = await storage.getMowers();
+    if (mowerList.length === 0) {
+      console.log("Seeding mowers...");
+      await storage.createMower({ name: "Honda HRU216", brand: "Honda", model: "HRU216", type: "push", description: "21\" push mower, reliable and efficient", icon: "push" });
+      await storage.createMower({ name: "Greenworks 22\" Optimus", brand: "Greenworks", model: "22\" Optimus", type: "self_propelled", description: "Battery-powered, eco-friendly option", icon: "self_propelled" });
+      await storage.createMower({ name: "Scag V-Ride 36\"", brand: "Scag", model: "V-Ride 36", type: "stand_on", description: "Commercial stand-on, great for medium lawns", icon: "stand_on" });
+      await storage.createMower({ name: "Bush Ranger 21\"", brand: "Bush Ranger", model: "21", type: "push", description: "Heavy-duty push mower for tough conditions", icon: "push" });
+      await storage.createMower({ name: "Husqvarna Z254", brand: "Husqvarna", model: "Z254", type: "ride_on", description: "54\" ride-on, ideal for large properties", icon: "ride_on" });
+      console.log("Mowers seeded.");
+    }
+
+    // Seed treatment types if empty
+    const treatmentList = await storage.getTreatmentTypes();
+    if (treatmentList.length === 0) {
+      console.log("Seeding treatment types...");
+      await storage.createTreatmentType({ name: "Soil Wetter", description: "Improves water penetration in hydrophobic soils", category: "soil", icon: "droplet" });
+      await storage.createTreatmentType({ name: "Fertilizer - Spring", description: "High nitrogen blend for spring growth", category: "fertilizer", icon: "leaf" });
+      await storage.createTreatmentType({ name: "Fertilizer - Summer", description: "Balanced NPK with iron for summer stress", category: "fertilizer", icon: "leaf" });
+      await storage.createTreatmentType({ name: "Fertilizer - Autumn", description: "Potassium-rich for winter preparation", category: "fertilizer", icon: "leaf" });
+      await storage.createTreatmentType({ name: "Core Aeration", description: "Reduces compaction, improves root growth", category: "aeration", icon: "circle-dot" });
+      await storage.createTreatmentType({ name: "Irrigation Check", description: "System inspection and adjustment", category: "irrigation", icon: "droplets" });
+      await storage.createTreatmentType({ name: "Soil Test", description: "pH and nutrient analysis", category: "soil", icon: "flask-conical" });
+      await storage.createTreatmentType({ name: "Pest Control - Lawn Grubs", description: "Treatment for lawn grub infestations", category: "pest", icon: "bug" });
+      console.log("Treatment types seeded.");
+    }
+
+    // Seed program templates if empty
+    const templateList = await storage.getProgramTemplates();
+    if (templateList.length === 0) {
+      console.log("Seeding program templates...");
+      await storage.createProgramTemplate({
+        name: "Essentials",
+        description: "22 services per year - fortnightly during growing season, monthly during winter",
+        servicesPerYear: 22,
+        servicesPerMonth: JSON.stringify([2, 2, 2, 2, 1, 1, 1, 1, 2, 2, 2, 2])
+      });
+      await storage.createProgramTemplate({
+        name: "Elite",
+        description: "24 services per year - fortnightly all year round",
+        servicesPerYear: 24,
+        servicesPerMonth: JSON.stringify([2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2])
+      });
+      await storage.createProgramTemplate({
+        name: "Prestige",
+        description: "26 services per year - weekly during peak, fortnightly during winter",
+        servicesPerYear: 26,
+        servicesPerMonth: JSON.stringify([3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3])
+      });
+      console.log("Program templates seeded.");
     }
   } catch (e) {
     console.error("Seeding failed:", e);
