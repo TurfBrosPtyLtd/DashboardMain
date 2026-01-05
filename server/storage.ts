@@ -27,7 +27,7 @@ import {
   type JobInvoiceItem, type InsertJobInvoiceItem,
   jobTreatments
 } from "@shared/schema";
-import { eq, and, desc, gte, lt, isNull } from "drizzle-orm";
+import { eq, and, desc, gte, lt, isNull, isNotNull } from "drizzle-orm";
 
 export interface IStorage {
   // Staff
@@ -550,6 +550,15 @@ export class DatabaseStorage implements IStorage {
 
     const jobMonth = new Date(job.scheduledDate).getMonth() + 1;
 
+    // Clear any existing template-seeded treatments first (idempotent operation)
+    // Only delete treatments that came from a template (have programTemplateTreatmentId)
+    await db.delete(jobTreatments).where(
+      and(
+        eq(jobTreatments.jobId, jobId),
+        isNotNull(jobTreatments.programTemplateTreatmentId)
+      )
+    );
+
     // Get template treatments for this month
     const templateTreatments = await db.query.programTemplateTreatments.findMany({
       where: and(
@@ -575,7 +584,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async clearJobTreatments(jobId: number): Promise<boolean> {
-    await db.delete(jobTreatments).where(eq(jobTreatments.jobId, jobId));
+    // Only clear template-seeded treatments (preserve manual entries)
+    await db.delete(jobTreatments).where(
+      and(
+        eq(jobTreatments.jobId, jobId),
+        isNotNull(jobTreatments.programTemplateTreatmentId)
+      )
+    );
     return true;
   }
 
