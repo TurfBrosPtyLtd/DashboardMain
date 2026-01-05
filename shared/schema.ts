@@ -90,6 +90,7 @@ export const jobs = pgTable("jobs", {
   jobRunId: integer("job_run_id").references(() => jobRuns.id),
   assignedToId: integer("assigned_to_id").references(() => staff.id),
   billingContactId: integer("billing_contact_id"),
+  clientProgramId: integer("client_program_id"), // Link to client's program for treatment tracking
   scheduledDate: timestamp("scheduled_date").notNull(),
   scheduledTime: timestamp("scheduled_time"), // Optional specific time for time-sensitive jobs
   estimatedDurationMinutes: integer("estimated_duration_minutes"),

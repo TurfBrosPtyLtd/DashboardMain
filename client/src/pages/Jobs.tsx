@@ -31,7 +31,11 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import type { JobRun, Crew, Staff, Mower, Client, Job, JobTask } from "@shared/schema";
+import type { JobRun, Crew, Staff, Mower, Client, Job, JobTask, ClientProgramTreatment, TreatmentType } from "@shared/schema";
+import { Leaf } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+
+type TreatmentWithType = ClientProgramTreatment & { treatmentType: TreatmentType };
 import { X } from "lucide-react";
 
 type ViewType = "daily" | "weekly" | "monthly";
@@ -97,6 +101,10 @@ export default function Jobs() {
   const deleteJobTask = useDeleteJobTask();
   
   const { data: jobPhotos } = useJobPhotos(selectedJobId);
+  const { data: jobTreatments } = useQuery<TreatmentWithType[]>({
+    queryKey: ["/api/jobs", selectedJobId, "treatments"],
+    enabled: !!selectedJobId,
+  });
   const createJobPhoto = useCreateJobPhoto();
   const deleteJobPhoto = useDeleteJobPhoto();
   const { uploadFile, isUploading } = useUpload();
@@ -223,6 +231,20 @@ export default function Jobs() {
   const handleDeletePhoto = async (photoId: number) => {
     if (!selectedJobId) return;
     await deleteJobPhoto.mutateAsync({ photoId, jobId: selectedJobId });
+  };
+
+  const handleToggleTreatment = async (treatmentId: number, currentStatus: string) => {
+    const newStatus = currentStatus === "completed" ? "pending" : "completed";
+    try {
+      await apiRequest("PUT", `/api/client-program-treatments/${treatmentId}`, {
+        status: newStatus,
+        completedAt: newStatus === "completed" ? new Date().toISOString() : null,
+        jobId: newStatus === "completed" ? selectedJobId : null,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", selectedJobId, "treatments"] });
+    } catch (error) {
+      console.error("Failed to update treatment:", error);
+    }
   };
 
   const getSelectedClient = (): Client | undefined => {
@@ -1839,6 +1861,49 @@ export default function Jobs() {
                       </div>
                     )}
                   </div>
+
+                  {jobTreatments && jobTreatments.length > 0 && (
+                    <div className="border-t pt-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium text-sm flex items-center gap-2">
+                          <Leaf className="w-4 h-4" />
+                          Treatments Due This Month
+                        </h4>
+                        <span className="text-xs text-muted-foreground">
+                          {jobTreatments.filter(t => t.status === "completed").length}/{jobTreatments.length} done
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        {jobTreatments.map(treatment => (
+                          <div 
+                            key={treatment.id} 
+                            className={`flex items-center gap-3 p-2 rounded-lg ${treatment.status === "completed" ? "bg-green-50 dark:bg-green-950/30" : "bg-muted/50"}`}
+                            data-testid={`treatment-${treatment.id}`}
+                          >
+                            <Checkbox
+                              checked={treatment.status === "completed"}
+                              onCheckedChange={() => handleToggleTreatment(treatment.id, treatment.status || "pending")}
+                              data-testid={`checkbox-treatment-${treatment.id}`}
+                            />
+                            <div className="flex-1">
+                              <div className={`font-medium ${treatment.status === "completed" ? "line-through text-muted-foreground" : ""}`}>
+                                {treatment.treatmentType.name}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {treatment.treatmentType.category}
+                              </div>
+                            </div>
+                            {treatment.status === "completed" && (
+                              <Badge variant="outline" className="text-xs text-green-600 border-green-300">
+                                Done
+                              </Badge>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {selectedJob.notes && (
                     <div className="space-y-1">

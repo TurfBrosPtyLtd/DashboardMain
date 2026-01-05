@@ -766,6 +766,24 @@ export async function registerRoutes(
       const clientId = Number(req.params.id);
       const input = insertClientProgramSchema.parse({ ...req.body, clientId });
       const program = await storage.createClientProgram(input);
+      
+      // Auto-generate treatments from program template
+      const templateWithTreatments = await storage.getProgramTemplate(input.programTemplateId);
+      if (templateWithTreatments?.treatments && templateWithTreatments.treatments.length > 0) {
+        const startDate = input.startDate ? new Date(input.startDate) : new Date();
+        const currentYear = startDate.getFullYear();
+        
+        const treatmentsToCreate = templateWithTreatments.treatments.map(t => ({
+          clientProgramId: program.id,
+          treatmentTypeId: t.treatmentTypeId,
+          targetMonth: t.month,
+          targetYear: currentYear,
+          status: "pending" as const,
+        }));
+        
+        await storage.createClientProgramTreatments(treatmentsToCreate);
+      }
+      
       res.status(201).json(program);
     } catch (err) {
       res.status(400).json({ message: "Invalid input" });
@@ -808,6 +826,17 @@ export async function registerRoutes(
       res.json(treatment);
     } catch (err) {
       res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  // Job Treatments - get treatments due for a job based on client program and month
+  app.get("/api/jobs/:id/treatments", async (req, res) => {
+    try {
+      const jobId = Number(req.params.id);
+      const treatments = await storage.getTreatmentsForJob(jobId);
+      res.json(treatments);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid job ID" });
     }
   });
 

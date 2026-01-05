@@ -113,7 +113,10 @@ export interface IStorage {
 
   // Client Program Treatments
   getClientProgramTreatments(clientProgramId: number): Promise<(ClientProgramTreatment & { treatmentType: TreatmentType })[]>;
+  getTreatmentsForJob(jobId: number): Promise<(ClientProgramTreatment & { treatmentType: TreatmentType })[]>;
   updateClientProgramTreatment(id: number, updates: Partial<ClientProgramTreatment>): Promise<ClientProgramTreatment | undefined>;
+  createClientProgramTreatment(treatment: InsertClientProgramTreatment): Promise<ClientProgramTreatment>;
+  createClientProgramTreatments(treatments: InsertClientProgramTreatment[]): Promise<ClientProgramTreatment[]>;
 
   // Job Time Entries
   getJobTimeEntries(jobId: number): Promise<(JobTimeEntry & { staff: Staff })[]>;
@@ -462,9 +465,53 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
+  async getTreatmentsForJob(jobId: number): Promise<(ClientProgramTreatment & { treatmentType: TreatmentType })[]> {
+    const job = await db.query.jobs.findFirst({
+      where: eq(jobs.id, jobId)
+    });
+    if (!job) return [];
+
+    const jobMonth = new Date(job.scheduledDate).getMonth() + 1;
+    const jobYear = new Date(job.scheduledDate).getFullYear();
+
+    const activeClientPrograms = await db.query.clientPrograms.findMany({
+      where: and(
+        eq(clientPrograms.clientId, job.clientId),
+        eq(clientPrograms.status, "active")
+      )
+    });
+
+    if (activeClientPrograms.length === 0) return [];
+
+    const allTreatments: (ClientProgramTreatment & { treatmentType: TreatmentType })[] = [];
+    for (const program of activeClientPrograms) {
+      const treatments = await db.query.clientProgramTreatments.findMany({
+        where: and(
+          eq(clientProgramTreatments.clientProgramId, program.id),
+          eq(clientProgramTreatments.targetMonth, jobMonth),
+          eq(clientProgramTreatments.targetYear, jobYear)
+        ),
+        with: { treatmentType: true }
+      });
+      allTreatments.push(...treatments);
+    }
+
+    return allTreatments;
+  }
+
   async updateClientProgramTreatment(id: number, updates: Partial<ClientProgramTreatment>): Promise<ClientProgramTreatment | undefined> {
     const [updated] = await db.update(clientProgramTreatments).set(updates).where(eq(clientProgramTreatments.id, id)).returning();
     return updated;
+  }
+
+  async createClientProgramTreatment(treatment: InsertClientProgramTreatment): Promise<ClientProgramTreatment> {
+    const [newTreatment] = await db.insert(clientProgramTreatments).values(treatment).returning();
+    return newTreatment;
+  }
+
+  async createClientProgramTreatments(treatments: InsertClientProgramTreatment[]): Promise<ClientProgramTreatment[]> {
+    if (treatments.length === 0) return [];
+    return await db.insert(clientProgramTreatments).values(treatments).returning();
   }
 
   // Job Time Entries

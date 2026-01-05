@@ -13,9 +13,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { STAFF_ROLES, MOWER_TYPES, type Staff, type Mower, type TreatmentType, type ProgramTemplate } from "@shared/schema";
+import { STAFF_ROLES, MOWER_TYPES, type Staff, type Mower, type TreatmentType, type ProgramTemplate, type ProgramTemplateTreatment } from "@shared/schema";
 import { getServicesArray } from "@shared/serviceDistribution";
-import { Users, Shield, Save, Plus, Pencil, Leaf, Calendar, Tractor, Droplet, Bug, FlaskConical, CircleDot, Droplets, Calculator, RefreshCw } from "lucide-react";
+import { Users, Shield, Save, Plus, Pencil, Leaf, Calendar, Tractor, Droplet, Bug, FlaskConical, CircleDot, Droplets, Calculator, RefreshCw, ChevronDown, ChevronUp, X } from "lucide-react";
+
+type ProgramWithTreatments = ProgramTemplate & { 
+  treatments: (ProgramTemplateTreatment & { treatmentType: TreatmentType })[] 
+};
 
 function MowerIcon({ type }: { type: string }) {
   switch (type) {
@@ -73,6 +77,9 @@ export default function Settings() {
   const [treatmentDialogOpen, setTreatmentDialogOpen] = useState(false);
   const [programDialogOpen, setProgramDialogOpen] = useState(false);
   const [editingProgram, setEditingProgram] = useState<ProgramTemplate | null>(null);
+  const [expandedProgram, setExpandedProgram] = useState<number | null>(null);
+  const [addTreatmentDialogOpen, setAddTreatmentDialogOpen] = useState(false);
+  const [selectedProgramForTreatment, setSelectedProgramForTreatment] = useState<number | null>(null);
   
   const currentYear = new Date().getFullYear();
   const [programYear, setProgramYear] = useState(currentYear);
@@ -217,6 +224,44 @@ export default function Settings() {
       toast({ title: editingProgram ? "Failed to update program" : "Failed to create program", variant: "destructive" });
     }
   };
+
+  // Fetch expanded program with treatments
+  const { data: expandedProgramData } = useQuery<ProgramWithTreatments>({
+    queryKey: ["/api/program-templates", expandedProgram],
+    enabled: !!expandedProgram,
+  });
+
+  const handleAddTreatmentToProgram = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!selectedProgramForTreatment) return;
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+    try {
+      await apiRequest("POST", `/api/program-templates/${selectedProgramForTreatment}/treatments`, {
+        treatmentTypeId: Number(formData.get("treatmentTypeId")),
+        month: Number(formData.get("month")),
+        instructions: formData.get("instructions") ? String(formData.get("instructions")) : null,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/program-templates", selectedProgramForTreatment] });
+      toast({ title: "Treatment added to program" });
+      setAddTreatmentDialogOpen(false);
+      form.reset();
+    } catch (error) {
+      toast({ title: "Failed to add treatment", variant: "destructive" });
+    }
+  };
+
+  const handleRemoveTreatmentFromProgram = async (treatmentId: number) => {
+    try {
+      await apiRequest("DELETE", `/api/program-template-treatments/${treatmentId}`);
+      queryClient.invalidateQueries({ queryKey: ["/api/program-templates", expandedProgram] });
+      toast({ title: "Treatment removed from program" });
+    } catch (error) {
+      toast({ title: "Failed to remove treatment", variant: "destructive" });
+    }
+  };
+
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
   if (isLoading) {
     return (
@@ -686,6 +731,8 @@ export default function Settings() {
                 <div className="space-y-4">
                   {programTemplates?.map(program => {
                     const months = parseServicesPerMonth(program.servicesPerMonth);
+                    const isExpanded = expandedProgram === program.id;
+                    const treatmentsData = isExpanded ? expandedProgramData?.treatments || [] : [];
                     
                     return (
                       <div
@@ -710,6 +757,14 @@ export default function Settings() {
                                 <Pencil className="w-4 h-4" />
                               </Button>
                             )}
+                            <Button 
+                              size="icon" 
+                              variant="ghost"
+                              onClick={() => setExpandedProgram(isExpanded ? null : program.id)}
+                              data-testid={`button-expand-program-${program.id}`}
+                            >
+                              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                            </Button>
                           </div>
                         </div>
                         <div className="grid grid-cols-12 gap-1">
@@ -726,6 +781,104 @@ export default function Settings() {
                             </div>
                           ))}
                         </div>
+                        
+                        {isExpanded && (
+                          <div className="pt-3 border-t space-y-3">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <p className="font-medium text-sm">Linked Treatments</p>
+                              {isManager && (
+                                <Dialog open={addTreatmentDialogOpen && selectedProgramForTreatment === program.id} onOpenChange={(open) => {
+                                  setAddTreatmentDialogOpen(open);
+                                  if (open) setSelectedProgramForTreatment(program.id);
+                                }}>
+                                  <DialogTrigger asChild>
+                                    <Button size="sm" variant="outline" data-testid={`button-add-program-treatment-${program.id}`}>
+                                      <Plus className="w-3 h-3 mr-1" />
+                                      Add Treatment
+                                    </Button>
+                                  </DialogTrigger>
+                                  <DialogContent>
+                                    <DialogHeader>
+                                      <DialogTitle>Add Treatment to {program.name}</DialogTitle>
+                                    </DialogHeader>
+                                    <form onSubmit={handleAddTreatmentToProgram} className="space-y-4">
+                                      <div className="space-y-2">
+                                        <Label htmlFor="treatment-type">Treatment</Label>
+                                        <Select name="treatmentTypeId" required>
+                                          <SelectTrigger data-testid="select-program-treatment-type">
+                                            <SelectValue placeholder="Select treatment" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {treatmentTypes?.map(t => (
+                                              <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label htmlFor="treatment-month">Month</Label>
+                                        <Select name="month" required>
+                                          <SelectTrigger data-testid="select-program-treatment-month">
+                                            <SelectValue placeholder="Select month" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {monthNames.map((m, i) => (
+                                              <SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label htmlFor="treatment-instructions">Instructions (optional)</Label>
+                                        <Textarea name="instructions" data-testid="input-program-treatment-instructions" />
+                                      </div>
+                                      <Button type="submit" className="w-full" data-testid="button-submit-program-treatment">
+                                        Add Treatment
+                                      </Button>
+                                    </form>
+                                  </DialogContent>
+                                </Dialog>
+                              )}
+                            </div>
+                            
+                            {treatmentsData.length > 0 ? (
+                              <div className="space-y-2">
+                                {treatmentsData.map(pt => (
+                                  <div 
+                                    key={pt.id} 
+                                    className="flex items-center justify-between gap-2 p-2 rounded bg-muted/50"
+                                    data-testid={`program-treatment-${pt.id}`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <TreatmentIcon category={pt.treatmentType?.category || null} />
+                                      <div>
+                                        <p className="text-sm font-medium">{pt.treatmentType?.name}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                          {monthNames[pt.month - 1]}
+                                          {pt.instructions && ` - ${pt.instructions}`}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    {isManager && (
+                                      <Button 
+                                        size="icon" 
+                                        variant="ghost"
+                                        onClick={() => handleRemoveTreatmentFromProgram(pt.id)}
+                                        data-testid={`button-remove-program-treatment-${pt.id}`}
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-muted-foreground text-center py-2">
+                                No treatments linked to this program.
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
