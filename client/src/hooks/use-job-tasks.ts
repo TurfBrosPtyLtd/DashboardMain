@@ -27,30 +27,11 @@ export function useCreateJobTask() {
   });
 }
 
-export function useUpdateJobTask() {
-  return useMutation({
-    mutationFn: async ({ 
-      taskId, 
-      jobId, 
-      updates 
-    }: { 
-      taskId: number; 
-      jobId: number; 
-      updates: Partial<JobTask> 
-    }) => {
-      const res = await apiRequest("PATCH", `/api/jobs/${jobId}/tasks/${taskId}`, updates);
-      return res.json();
-    },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/jobs", variables.jobId, "tasks"] });
-    },
-  });
-}
-
 export function useDeleteJobTask() {
   return useMutation({
     mutationFn: async ({ taskId, jobId }: { taskId: number; jobId: number }) => {
-      await apiRequest("DELETE", `/api/jobs/${jobId}/tasks/${taskId}`);
+      await apiRequest("DELETE", `/api/tasks/${taskId}`);
+      return { jobId };
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", variables.jobId, "tasks"] });
@@ -76,7 +57,7 @@ export function useToggleJobTask() {
         completedById: isCompleted ? completedById : null,
         completedAt: isCompleted ? new Date() : null
       };
-      const res = await apiRequest("PATCH", `/api/jobs/${jobId}/tasks/${taskId}`, updates);
+      const res = await apiRequest("PUT", `/api/tasks/${taskId}`, updates);
       return res.json();
     },
     onSuccess: (_, variables) => {

@@ -1600,6 +1600,9 @@ export default function Jobs() {
                         </span>
                       )}
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      These tasks could be completed every job or some jobs depending. Check with your team leader if unsure.
+                    </p>
                     
                     <div className="flex gap-2">
                       <Input 
