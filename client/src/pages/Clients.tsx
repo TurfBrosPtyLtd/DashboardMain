@@ -1,17 +1,100 @@
 import { useState } from "react";
 import { Layout } from "@/components/Layout";
 import { useClients, useCreateClient } from "@/hooks/use-clients";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Search, User } from "lucide-react";
+import { Plus, Search, User, ChevronDown, ChevronUp, Leaf, Check } from "lucide-react";
+import { format } from "date-fns";
+import type { JobTreatment, TreatmentType, Job } from "@shared/schema";
+
+type TreatmentHistoryItem = JobTreatment & { treatmentType: TreatmentType; job: Job };
+
+function ClientTreatmentHistory({ clientId }: { clientId: number }) {
+  const { data: treatments, isLoading } = useQuery<TreatmentHistoryItem[]>({
+    queryKey: ["/api/clients", clientId, "treatment-history"],
+  });
+
+  if (isLoading) {
+    return <div className="text-sm text-muted-foreground py-2">Loading treatments...</div>;
+  }
+
+  if (!treatments || treatments.length === 0) {
+    return <div className="text-sm text-muted-foreground py-2">No treatments recorded yet.</div>;
+  }
+
+  const completedTreatments = treatments.filter(t => t.status === "completed");
+  const pendingTreatments = treatments.filter(t => t.status !== "completed");
+
+  return (
+    <div className="space-y-3">
+      {completedTreatments.length > 0 && (
+        <div>
+          <h5 className="text-xs font-semibold text-muted-foreground uppercase mb-2">
+            Completed ({completedTreatments.length})
+          </h5>
+          <div className="space-y-2">
+            {completedTreatments.slice(0, 5).map(treatment => (
+              <div 
+                key={treatment.id} 
+                className="flex items-center gap-2 text-sm bg-green-50 dark:bg-green-950/30 p-2 rounded-lg"
+                data-testid={`treatment-history-${treatment.id}`}
+              >
+                <Check className="w-4 h-4 text-green-600" />
+                <div className="flex-1 min-w-0">
+                  <span className="font-medium">{treatment.treatmentType.name}</span>
+                  <span className="text-muted-foreground ml-2 text-xs">
+                    {treatment.completedAt ? format(new Date(treatment.completedAt), "MMM d, yyyy") : ""}
+                  </span>
+                </div>
+              </div>
+            ))}
+            {completedTreatments.length > 5 && (
+              <p className="text-xs text-muted-foreground">
+                +{completedTreatments.length - 5} more completed treatments
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {pendingTreatments.length > 0 && (
+        <div>
+          <h5 className="text-xs font-semibold text-muted-foreground uppercase mb-2">
+            Pending ({pendingTreatments.length})
+          </h5>
+          <div className="space-y-2">
+            {pendingTreatments.slice(0, 3).map(treatment => (
+              <div 
+                key={treatment.id} 
+                className="flex items-center gap-2 text-sm bg-muted/50 p-2 rounded-lg"
+                data-testid={`treatment-pending-${treatment.id}`}
+              >
+                <Leaf className="w-4 h-4 text-muted-foreground" />
+                <div className="flex-1 min-w-0">
+                  <span className="font-medium">{treatment.treatmentType.name}</span>
+                  <span className="text-muted-foreground ml-2 text-xs">
+                    {treatment.job?.scheduledDate ? format(new Date(treatment.job.scheduledDate), "MMM d") : "Scheduled"}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Clients() {
   const { data: clients, isLoading } = useClients();
   const createClient = useCreateClient();
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [expandedClientId, setExpandedClientId] = useState<number | null>(null);
 
   const filteredClients = clients?.filter(c => 
     c.name.toLowerCase().includes(search.toLowerCase()) || 
@@ -26,9 +109,13 @@ export default function Clients() {
       address: formData.get("address") as string,
       email: formData.get("email") as string,
       phone: formData.get("phone") as string,
-      programTier: "24", // Default value, programs are now assigned to jobs
+      programTier: "24",
     });
     setIsOpen(false);
+  };
+
+  const toggleExpanded = (clientId: number) => {
+    setExpandedClientId(expandedClientId === clientId ? null : clientId);
   };
 
   return (
@@ -100,6 +187,18 @@ export default function Clients() {
               <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
                 <User className="w-5 h-5" />
               </div>
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={() => toggleExpanded(client.id)}
+                data-testid={`button-expand-client-${client.id}`}
+              >
+                {expandedClientId === client.id ? (
+                  <ChevronUp className="w-4 h-4" />
+                ) : (
+                  <ChevronDown className="w-4 h-4" />
+                )}
+              </Button>
             </div>
             
             <h3 className="text-xl font-bold font-display mb-1">{client.name}</h3>
@@ -115,6 +214,16 @@ export default function Clients() {
                 <p>{client.phone || "-"}</p>
               </div>
             </div>
+
+            {expandedClientId === client.id && (
+              <div className="border-t border-border pt-4 mt-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Leaf className="w-4 h-4 text-primary" />
+                  <h4 className="font-semibold text-sm">Treatment History</h4>
+                </div>
+                <ClientTreatmentHistory clientId={client.id} />
+              </div>
+            )}
           </div>
         ))}
       </div>

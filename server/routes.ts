@@ -969,6 +969,17 @@ export async function registerRoutes(
     }
   });
 
+  // Client Treatment History
+  app.get("/api/clients/:id/treatment-history", async (req, res) => {
+    try {
+      const clientId = Number(req.params.id);
+      const treatments = await storage.getClientTreatmentHistory(clientId);
+      res.json(treatments);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid client ID" });
+    }
+  });
+
   app.post("/api/clients/:id/programs", async (req, res) => {
     try {
       const clientId = Number(req.params.id);

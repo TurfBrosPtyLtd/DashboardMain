@@ -31,7 +31,7 @@ import {
   type JobInvoiceItem, type InsertJobInvoiceItem,
   jobTreatments
 } from "@shared/schema";
-import { eq, and, or, desc, gte, lt, isNull, isNotNull } from "drizzle-orm";
+import { eq, and, or, desc, gte, lt, isNull, isNotNull, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // Staff
@@ -143,6 +143,7 @@ export interface IStorage {
 
   // Job Treatments (direct job-based treatments)
   getJobTreatments(jobId: number): Promise<(JobTreatment & { treatmentType: TreatmentType })[]>;
+  getClientTreatmentHistory(clientId: number): Promise<(JobTreatment & { treatmentType: TreatmentType; job: Job })[]>;
   createJobTreatments(treatments: InsertJobTreatment[]): Promise<JobTreatment[]>;
   updateJobTreatment(id: number, updates: Partial<JobTreatment>): Promise<JobTreatment | undefined>;
   seedJobTreatmentsFromTemplate(jobId: number, programTemplateId: number): Promise<JobTreatment[]>;
@@ -675,6 +676,26 @@ export class DatabaseStorage implements IStorage {
       where: eq(jobTreatments.jobId, jobId),
       with: { treatmentType: true }
     });
+  }
+
+  async getClientTreatmentHistory(clientId: number): Promise<(JobTreatment & { treatmentType: TreatmentType; job: Job })[]> {
+    // First get all job IDs for this client
+    const clientJobs = await db.select({ id: jobs.id }).from(jobs).where(eq(jobs.clientId, clientId));
+    const jobIds = clientJobs.map(j => j.id);
+    
+    if (jobIds.length === 0) return [];
+    
+    // Then get all treatments for those jobs
+    const treatments = await db.query.jobTreatments.findMany({
+      where: inArray(jobTreatments.jobId, jobIds),
+      with: { 
+        treatmentType: true,
+        job: true
+      },
+      orderBy: [desc(jobTreatments.completedAt)]
+    });
+    
+    return treatments as (JobTreatment & { treatmentType: TreatmentType; job: Job })[];
   }
 
   async createJobTreatments(treatments: InsertJobTreatment[]): Promise<JobTreatment[]> {

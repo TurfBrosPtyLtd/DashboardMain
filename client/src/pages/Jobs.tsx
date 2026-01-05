@@ -31,11 +31,11 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import type { JobRun, Crew, Staff, Mower, Client, Job, JobTask, ClientProgramTreatment, TreatmentType, ProgramTemplate } from "@shared/schema";
+import type { JobRun, Crew, Staff, Mower, Client, Job, JobTask, JobTreatment, TreatmentType, ProgramTemplate, TreatmentProgram } from "@shared/schema";
 import { Leaf } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
-type TreatmentWithType = ClientProgramTreatment & { treatmentType: TreatmentType };
+type JobTreatmentWithType = JobTreatment & { treatmentType: TreatmentType };
 import { X } from "lucide-react";
 
 type ViewType = "daily" | "weekly" | "monthly";
@@ -58,6 +58,7 @@ export default function Jobs() {
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [selectedMowerId, setSelectedMowerId] = useState<string>("");
   const [selectedProgramTemplateId, setSelectedProgramTemplateId] = useState<string>("");
+  const [selectedTreatmentProgramId, setSelectedTreatmentProgramId] = useState<string>("");
   const [cutHeightUnit, setCutHeightUnit] = useState<string>("level");
   const [cutHeightValue, setCutHeightValue] = useState<string>("");
   const [newJobTasks, setNewJobTasks] = useState<string[]>([]);
@@ -103,6 +104,7 @@ export default function Jobs() {
   const { canViewMoney, canViewGateCode } = useCurrentStaff();
   const { data: mowers } = useQuery<Mower[]>({ queryKey: ["/api/mowers"] });
   const { data: programTemplates } = useQuery<ProgramTemplate[]>({ queryKey: ["/api/program-templates"] });
+  const { data: treatmentPrograms } = useQuery<TreatmentProgram[]>({ queryKey: ["/api/treatment-programs"] });
   const { data: jobRuns, refetch: refetchJobRuns } = useJobRuns();
   const { data: crews, refetch: refetchCrews } = useCrews();
   const createJob = useCreateJob();
@@ -129,7 +131,7 @@ export default function Jobs() {
   const deleteJobTask = useDeleteJobTask();
   
   const { data: jobPhotos } = useJobPhotos(selectedJobId);
-  const { data: jobTreatments } = useQuery<TreatmentWithType[]>({
+  const { data: jobTreatments } = useQuery<JobTreatmentWithType[]>({
     queryKey: ["/api/jobs", selectedJobId, "treatments"],
     enabled: !!selectedJobId,
   });
@@ -264,10 +266,10 @@ export default function Jobs() {
   const handleToggleTreatment = async (treatmentId: number, currentStatus: string) => {
     const newStatus = currentStatus === "completed" ? "pending" : "completed";
     try {
-      await apiRequest("PUT", `/api/client-program-treatments/${treatmentId}`, {
+      await apiRequest("PUT", `/api/job-treatments/${treatmentId}`, {
         status: newStatus,
         completedAt: newStatus === "completed" ? new Date().toISOString() : null,
-        jobId: newStatus === "completed" ? selectedJobId : null,
+        completedById: newStatus === "completed" ? currentStaff?.id : null,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", selectedJobId, "treatments"] });
     } catch (error) {
@@ -304,6 +306,7 @@ export default function Jobs() {
     setSelectedClientId("");
     setSelectedMowerId("");
     setSelectedProgramTemplateId("");
+    setSelectedTreatmentProgramId("");
     setCutHeightUnit("level");
     setCutHeightValue("");
     setNewJobTasks([]);
@@ -332,6 +335,7 @@ export default function Jobs() {
       price: priceValue ? Number(priceValue) : 0,
       programTemplateId: selectedTemplate ? selectedTemplate.id : undefined,
       programTier: selectedTemplate ? String(selectedTemplate.servicesPerYear) : undefined,
+      treatmentProgramId: selectedTreatmentProgramId && selectedTreatmentProgramId !== "none" ? Number(selectedTreatmentProgramId) : undefined,
       mowerId: selectedMowerId && selectedMowerId !== "none" ? Number(selectedMowerId) : undefined,
       cutHeightUnit: cutHeightUnit || undefined,
       cutHeightValue: cutHeightValue || undefined,
@@ -1018,6 +1022,26 @@ export default function Jobs() {
                     </Select>
                     <p className="text-xs text-muted-foreground">
                       Selecting a program will schedule future services based on the start date.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="treatmentProgram">Treatment Program</Label>
+                    <Select value={selectedTreatmentProgramId} onValueChange={setSelectedTreatmentProgramId}>
+                      <SelectTrigger data-testid="select-treatment-program">
+                        <SelectValue placeholder="Select treatment program (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No treatment program</SelectItem>
+                        {treatmentPrograms?.map(program => (
+                          <SelectItem key={program.id} value={String(program.id)}>
+                            {program.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Links treatment schedules to this job based on the scheduled month.
                     </p>
                   </div>
                   
