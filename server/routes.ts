@@ -808,9 +808,9 @@ export async function registerRoutes(
       const staffId = await getCurrentStaffId(req);
       if (!staffId) return res.status(401).json({ message: "Not authenticated" });
       
-      const existingEntry = await storage.getAnyActiveTimeEntry(jobId);
+      const existingEntry = await storage.getActiveTimeEntry(jobId, staffId);
       if (existingEntry) {
-        return res.status(400).json({ message: "Timer already running for this job" });
+        return res.status(400).json({ message: "You already have a timer running for this job" });
       }
       
       const input = insertJobTimeEntrySchema.parse({

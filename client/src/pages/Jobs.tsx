@@ -82,16 +82,18 @@ export default function Jobs() {
   const startTimer = useStartTimer();
   const stopTimer = useStopTimer();
   const deleteTimeEntry = useDeleteTimeEntry();
+  const { staff: currentStaff } = useCurrentStaff();
   
-  const activeTimeEntry = timeEntries?.find(e => !e.endTime);
+  const myActiveTimeEntry = timeEntries?.find(e => !e.endTime && e.staffId === currentStaff?.id);
+  const otherActiveEntries = timeEntries?.filter(e => !e.endTime && e.staffId !== currentStaff?.id) || [];
   
   useEffect(() => {
-    if (!activeTimeEntry) {
+    if (!myActiveTimeEntry) {
       setElapsedSeconds(0);
       return;
     }
     
-    const startTime = new Date(activeTimeEntry.startTime).getTime();
+    const startTime = new Date(myActiveTimeEntry.startTime).getTime();
     const updateElapsed = () => {
       setElapsedSeconds(Math.floor((Date.now() - startTime) / 1000));
     };
@@ -100,7 +102,7 @@ export default function Jobs() {
     const interval = setInterval(updateElapsed, 1000);
     
     return () => clearInterval(interval);
-  }, [activeTimeEntry]);
+  }, [myActiveTimeEntry]);
 
   const formatElapsedTime = (seconds: number): string => {
     const hrs = Math.floor(seconds / 3600);
@@ -118,8 +120,8 @@ export default function Jobs() {
   };
 
   const handleStopTimer = async () => {
-    if (!activeTimeEntry || !selectedJobId) return;
-    await stopTimer.mutateAsync({ entryId: activeTimeEntry.id, jobId: selectedJobId });
+    if (!myActiveTimeEntry || !selectedJobId) return;
+    await stopTimer.mutateAsync({ entryId: myActiveTimeEntry.id, jobId: selectedJobId });
   };
 
   const handleDeleteTimeEntry = async (entryId: number) => {
@@ -1466,7 +1468,7 @@ export default function Jobs() {
                         <Timer className="w-4 h-4" />
                         Timer
                       </h4>
-                      {activeTimeEntry && (
+                      {myActiveTimeEntry && (
                         <div className="flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                           <span className="font-mono text-lg font-bold text-red-600 dark:text-red-400">
@@ -1476,10 +1478,16 @@ export default function Jobs() {
                       )}
                     </div>
                     
-                    {activeTimeEntry ? (
+                    {otherActiveEntries.length > 0 && (
+                      <div className="text-xs text-muted-foreground bg-muted rounded px-2 py-1">
+                        Active: {otherActiveEntries.map(e => e.staff?.name || "Unknown").join(", ")}
+                      </div>
+                    )}
+                    
+                    {myActiveTimeEntry ? (
                       <div className="space-y-2">
                         <div className="text-sm text-muted-foreground">
-                          Started by {activeTimeEntry.staff?.name || "Unknown"} ({activeTimeEntry.entryType === "crew" ? "Crew" : "Self"})
+                          Your timer ({myActiveTimeEntry.entryType === "crew" ? "Crew" : "Self"})
                         </div>
                         <Button 
                           size="sm" 
@@ -1489,7 +1497,7 @@ export default function Jobs() {
                           data-testid="button-stop-timer"
                         >
                           <Square className="w-3 h-3 mr-1" />
-                          {stopTimer.isPending ? "Stopping..." : `Stop (${activeTimeEntry.entryType === "crew" ? "Crew" : "Self"})`}
+                          {stopTimer.isPending ? "Stopping..." : `Stop My Timer (${myActiveTimeEntry.entryType === "crew" ? "Crew" : "Self"})`}
                         </Button>
                       </div>
                     ) : (
