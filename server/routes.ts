@@ -720,6 +720,21 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/treatment-types/:id", async (req, res) => {
+    try {
+      const role = await getCurrentUserRole(req);
+      if (role !== "manager" && role !== "owner") {
+        return res.status(403).json({ message: "Only managers and owners can delete treatment types" });
+      }
+      const id = Number(req.params.id);
+      const deleted = await storage.deleteTreatmentType(id);
+      if (!deleted) return res.status(404).json({ message: "Treatment type not found" });
+      res.json({ success: true });
+    } catch (err) {
+      res.status(400).json({ message: "Failed to delete treatment type" });
+    }
+  });
+
   // Treatment Programs (standalone treatment schedules, separate from service programs)
   app.get("/api/treatment-programs", async (req, res) => {
     const programs = await storage.getTreatmentPrograms();

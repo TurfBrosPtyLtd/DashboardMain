@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { STAFF_ROLES, MOWER_TYPES, type Staff, type Mower, type TreatmentType, type ProgramTemplate, type ProgramTemplateTreatment, type TreatmentProgram, type TreatmentProgramSchedule } from "@shared/schema";
 import { getServicesArray } from "@shared/serviceDistribution";
-import { Users, Shield, Save, Plus, Pencil, Leaf, Calendar, Tractor, Droplet, Bug, FlaskConical, CircleDot, Droplets, Calculator, RefreshCw, ChevronDown, ChevronUp, X } from "lucide-react";
+import { Users, Shield, Save, Plus, Pencil, Leaf, Calendar, Tractor, Droplet, Bug, FlaskConical, CircleDot, Droplets, Calculator, RefreshCw, ChevronDown, ChevronUp, X, Trash2 } from "lucide-react";
 
 type ProgramWithTreatments = ProgramTemplate & { 
   treatments: (ProgramTemplateTreatment & { treatmentType: TreatmentType })[] 
@@ -299,6 +299,19 @@ export default function Settings() {
   const openEditTreatment = (treatment: TreatmentType) => {
     setEditingTreatment(treatment);
     setTreatmentDialogOpen(true);
+  };
+
+  const handleDeleteTreatmentType = async (treatmentId: number) => {
+    if (!confirm("Are you sure you want to delete this treatment type? It will be removed from all programs.")) {
+      return;
+    }
+    try {
+      await apiRequest("DELETE", `/api/treatment-types/${treatmentId}`);
+      toast({ title: "Treatment type deleted" });
+      queryClient.invalidateQueries({ queryKey: ["/api/treatment-types"] });
+    } catch (error) {
+      toast({ title: "Failed to delete treatment type", variant: "destructive" });
+    }
   };
 
   const handleSaveTreatmentProgram = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -741,14 +754,24 @@ export default function Settings() {
                       </div>
                       <div className="flex items-center gap-2">
                         {isManager && (
-                          <Button 
-                            size="icon" 
-                            variant="ghost" 
-                            onClick={() => openEditTreatment(treatment)}
-                            data-testid={`button-edit-treatment-${treatment.id}`}
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
+                          <>
+                            <Button 
+                              size="icon" 
+                              variant="ghost" 
+                              onClick={() => openEditTreatment(treatment)}
+                              data-testid={`button-edit-treatment-${treatment.id}`}
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                            <Button 
+                              size="icon" 
+                              variant="ghost" 
+                              onClick={() => handleDeleteTreatmentType(treatment.id)}
+                              data-testid={`button-delete-treatment-${treatment.id}`}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </>
                         )}
                         <Badge variant="outline">{treatment.category}</Badge>
                       </div>

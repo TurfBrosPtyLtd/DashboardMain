@@ -100,6 +100,7 @@ export interface IStorage {
   getTreatmentTypes(): Promise<TreatmentType[]>;
   createTreatmentType(type: InsertTreatmentType): Promise<TreatmentType>;
   updateTreatmentType(id: number, updates: Partial<TreatmentType>): Promise<TreatmentType | undefined>;
+  deleteTreatmentType(id: number): Promise<boolean>;
 
   // Treatment Programs (standalone treatment schedules)
   getTreatmentPrograms(): Promise<TreatmentProgram[]>;
@@ -421,6 +422,12 @@ export class DatabaseStorage implements IStorage {
   async updateTreatmentType(id: number, updates: Partial<TreatmentType>): Promise<TreatmentType | undefined> {
     const [updated] = await db.update(treatmentTypes).set(updates).where(eq(treatmentTypes.id, id)).returning();
     return updated;
+  }
+
+  async deleteTreatmentType(id: number): Promise<boolean> {
+    // Soft delete by setting isActive to false
+    const [deleted] = await db.update(treatmentTypes).set({ isActive: false }).where(eq(treatmentTypes.id, id)).returning();
+    return !!deleted;
   }
 
   // Treatment Programs
