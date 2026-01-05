@@ -185,7 +185,7 @@ export default function Jobs() {
         jobId: selectedJobId,
         url: response.objectPath,
         photoType,
-        caption: file.name
+        filename: file.name
       });
     }
     e.target.value = "";

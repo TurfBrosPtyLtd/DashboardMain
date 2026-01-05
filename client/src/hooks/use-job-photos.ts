@@ -21,16 +21,19 @@ export function useCreateJobPhoto() {
       jobId, 
       url, 
       photoType,
+      filename,
       caption 
     }: { 
       jobId: number; 
       url: string; 
       photoType: "before" | "during" | "after";
+      filename: string;
       caption?: string;
     }) => {
       const res = await apiRequest("POST", `/api/jobs/${jobId}/photos`, { 
         url, 
         photoType,
+        filename,
         caption 
       });
       return res.json();
