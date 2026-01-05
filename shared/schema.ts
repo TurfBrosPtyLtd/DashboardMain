@@ -173,11 +173,23 @@ export const jobTasks = pgTable("job_tasks", {
   completedAt: timestamp("completed_at"),
 });
 
+// Treatment categories - customizable categories for treatments
+export const treatmentCategories = pgTable("treatment_categories", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(), // lowercase identifier like 'fertilizer', 'pest'
+  icon: text("icon").default("flask"), // lucide icon name
+  color: text("color").default("purple"), // tailwind color name
+  isActive: boolean("is_active").default(true),
+  sortOrder: integer("sort_order").default(0),
+});
+
 // Treatment types - types of treatments available
 export const treatmentTypes = pgTable("treatment_types", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  category: text("category"), // 'fertilizer', 'soil', 'pest', 'other'
+  category: text("category"), // slug reference to treatment_categories
+  categoryId: integer("category_id").references(() => treatmentCategories.id),
   defaultNotes: text("default_notes"),
   isActive: boolean("is_active").default(true),
 });
@@ -587,6 +599,7 @@ export const insertClientContactSchema = createInsertSchema(clientContacts).omit
 export const insertMowerSchema = createInsertSchema(mowers).omit({ id: true });
 export const insertStaffMowerFavoriteSchema = createInsertSchema(staffMowerFavorites).omit({ id: true, createdAt: true });
 export const insertJobTaskSchema = createInsertSchema(jobTasks).omit({ id: true, completedAt: true });
+export const insertTreatmentCategorySchema = createInsertSchema(treatmentCategories).omit({ id: true });
 export const insertTreatmentTypeSchema = createInsertSchema(treatmentTypes).omit({ id: true });
 export const insertTreatmentProgramSchema = createInsertSchema(treatmentPrograms).omit({ id: true, createdAt: true });
 export const insertTreatmentProgramScheduleSchema = createInsertSchema(treatmentProgramSchedule).omit({ id: true });
@@ -629,6 +642,8 @@ export type InsertStaffMowerFavorite = z.infer<typeof insertStaffMowerFavoriteSc
 export type JobTask = typeof jobTasks.$inferSelect;
 export type InsertJobTask = z.infer<typeof insertJobTaskSchema>;
 export type TreatmentType = typeof treatmentTypes.$inferSelect;
+export type TreatmentCategory = typeof treatmentCategories.$inferSelect;
+export type InsertTreatmentCategory = z.infer<typeof insertTreatmentCategorySchema>;
 export type InsertTreatmentType = z.infer<typeof insertTreatmentTypeSchema>;
 export type TreatmentProgram = typeof treatmentPrograms.$inferSelect;
 export type InsertTreatmentProgram = z.infer<typeof insertTreatmentProgramSchema>;

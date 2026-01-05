@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { STAFF_ROLES, MOWER_TYPES, type Staff, type Mower, type TreatmentType, type ProgramTemplate, type ProgramTemplateTreatment, type TreatmentProgram, type TreatmentProgramSchedule } from "@shared/schema";
+import { STAFF_ROLES, MOWER_TYPES, type Staff, type Mower, type TreatmentType, type TreatmentCategory, type ProgramTemplate, type ProgramTemplateTreatment, type TreatmentProgram, type TreatmentProgramSchedule } from "@shared/schema";
 import { getServicesArray } from "@shared/serviceDistribution";
 import { Users, Shield, Save, Plus, Pencil, Leaf, Calendar, Tractor, Droplet, Bug, FlaskConical, CircleDot, Droplets, Calculator, RefreshCw, ChevronDown, ChevronUp, X, Trash2 } from "lucide-react";
 
@@ -197,11 +197,14 @@ export default function Settings() {
   const [saving, setSaving] = useState<number | null>(null);
 
   const { data: mowers } = useQuery<Mower[]>({ queryKey: ["/api/mowers"] });
+  const { data: treatmentCategories } = useQuery<TreatmentCategory[]>({ queryKey: ["/api/treatment-categories"] });
   const { data: treatmentTypes } = useQuery<TreatmentType[]>({ queryKey: ["/api/treatment-types"] });
   const { data: programTemplates } = useQuery<ProgramTemplate[]>({ queryKey: ["/api/program-templates"] });
   const { data: treatmentPrograms } = useQuery<TreatmentProgram[]>({ queryKey: ["/api/treatment-programs"] });
 
   const [mowerDialogOpen, setMowerDialogOpen] = useState(false);
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<TreatmentCategory | null>(null);
   const [treatmentDialogOpen, setTreatmentDialogOpen] = useState(false);
   const [editingTreatment, setEditingTreatment] = useState<TreatmentType | null>(null);
   const [programDialogOpen, setProgramDialogOpen] = useState(false);
@@ -316,6 +319,54 @@ export default function Settings() {
     } catch (error) {
       toast({ title: "Failed to add mower", variant: "destructive" });
     }
+  };
+
+  const handleSaveCategory = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+    const name = String(formData.get("name") || "");
+    const slug = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    const data = {
+      name,
+      slug,
+      icon: String(formData.get("icon") || "flask"),
+      color: String(formData.get("color") || "purple"),
+    };
+    try {
+      if (editingCategory) {
+        await apiRequest("PUT", `/api/treatment-categories/${editingCategory.id}`, data);
+        toast({ title: "Category updated successfully" });
+      } else {
+        await apiRequest("POST", "/api/treatment-categories", data);
+        toast({ title: "Category added successfully" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/treatment-categories"] });
+      setCategoryDialogOpen(false);
+      setEditingCategory(null);
+      form.reset();
+    } catch (error) {
+      toast({ title: editingCategory ? "Failed to update category" : "Failed to add category", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteCategory = async (id: number) => {
+    try {
+      await apiRequest("DELETE", `/api/treatment-categories/${id}`);
+      queryClient.invalidateQueries({ queryKey: ["/api/treatment-categories"] });
+      toast({ title: "Category deleted" });
+    } catch (error) {
+      toast({ title: "Failed to delete category", variant: "destructive" });
+    }
+  };
+
+  const resetCategoryForm = () => {
+    setEditingCategory(null);
+  };
+
+  const openEditCategory = (category: TreatmentCategory) => {
+    setEditingCategory(category);
+    setCategoryDialogOpen(true);
   };
 
   const handleSaveTreatment = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -745,6 +796,108 @@ export default function Settings() {
               <CardHeader>
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2">
+                    <FlaskConical className="w-5 h-5 text-primary" />
+                    <CardTitle>Treatment Categories</CardTitle>
+                  </div>
+                  {isManager && (
+                    <Dialog open={categoryDialogOpen} onOpenChange={(open) => {
+                      setCategoryDialogOpen(open);
+                      if (!open) resetCategoryForm();
+                    }}>
+                      <DialogTrigger asChild>
+                        <Button size="sm" data-testid="button-add-category">
+                          <Plus className="w-4 h-4 mr-1" />
+                          Add Category
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>{editingCategory ? "Edit Category" : "Add Category"}</DialogTitle>
+                        </DialogHeader>
+                        <form onSubmit={handleSaveCategory} className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="category-name">Name</Label>
+                            <Input 
+                              id="category-name" 
+                              name="name" 
+                              required 
+                              defaultValue={editingCategory?.name || ""}
+                              key={editingCategory?.id || "new"}
+                              data-testid="input-category-name" 
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="category-color">Color</Label>
+                            <Select name="color" defaultValue={editingCategory?.color || "purple"} key={`color-${editingCategory?.id || "new"}`}>
+                              <SelectTrigger data-testid="select-category-color">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="green">Green</SelectItem>
+                                <SelectItem value="blue">Blue</SelectItem>
+                                <SelectItem value="amber">Amber</SelectItem>
+                                <SelectItem value="red">Red</SelectItem>
+                                <SelectItem value="purple">Purple</SelectItem>
+                                <SelectItem value="cyan">Cyan</SelectItem>
+                                <SelectItem value="gray">Gray</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <Button type="submit" className="w-full" data-testid="button-submit-category">
+                            {editingCategory ? "Save Changes" : "Add Category"}
+                          </Button>
+                        </form>
+                      </DialogContent>
+                    </Dialog>
+                  )}
+                </div>
+                <CardDescription>
+                  Customize categories to organize your treatment types.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2">
+                  {treatmentCategories?.map(cat => (
+                    <Badge
+                      key={cat.id}
+                      variant="outline"
+                      className="px-3 py-1.5 flex items-center gap-2"
+                      data-testid={`category-badge-${cat.id}`}
+                    >
+                      <span>{cat.name}</span>
+                      {isManager && (
+                        <>
+                          <button
+                            type="button"
+                            className="text-muted-foreground hover:text-foreground"
+                            onClick={() => openEditCategory(cat)}
+                            data-testid={`button-edit-category-${cat.id}`}
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            className="text-muted-foreground hover:text-destructive"
+                            onClick={() => handleDeleteCategory(cat.id)}
+                            data-testid={`button-delete-category-${cat.id}`}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </>
+                      )}
+                    </Badge>
+                  ))}
+                  {(!treatmentCategories || treatmentCategories.length === 0) && (
+                    <p className="text-muted-foreground">No categories defined. Add your first category above.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
                     <Leaf className="w-5 h-5 text-primary" />
                     <CardTitle>Treatment Types</CardTitle>
                   </div>
@@ -777,16 +930,17 @@ export default function Settings() {
                           </div>
                           <div className="space-y-2">
                             <Label htmlFor="treatment-category">Category</Label>
-                            <Select name="category" defaultValue={editingTreatment?.category || "fertilizer"} key={`cat-${editingTreatment?.id || "new"}`}>
+                            <Select name="category" defaultValue={editingTreatment?.category || treatmentCategories?.[0]?.slug || "fertilizer"} key={`cat-${editingTreatment?.id || "new"}`}>
                               <SelectTrigger data-testid="select-treatment-category">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="fertilizer">Fertilizer</SelectItem>
-                                <SelectItem value="soil">Soil Treatment</SelectItem>
-                                <SelectItem value="aeration">Aeration</SelectItem>
-                                <SelectItem value="irrigation">Irrigation</SelectItem>
-                                <SelectItem value="pest">Pest Control</SelectItem>
+                                {treatmentCategories?.map(cat => (
+                                  <SelectItem key={cat.id} value={cat.slug}>{cat.name}</SelectItem>
+                                ))}
+                                {(!treatmentCategories || treatmentCategories.length === 0) && (
+                                  <SelectItem value="other">Other</SelectItem>
+                                )}
                               </SelectContent>
                             </Select>
                           </div>

@@ -2,7 +2,7 @@ import { db } from "./db";
 import {
   staff, clients, crews, crewMembers, jobRuns, jobs, feedback, applications,
   clientContacts, mowers, staffMowerFavorites, jobTasks,
-  treatmentTypes, treatmentPrograms, treatmentProgramSchedule,
+  treatmentCategories, treatmentTypes, treatmentPrograms, treatmentProgramSchedule,
   programTemplates, programTemplateTreatments,
   clientPrograms, clientProgramServices, clientProgramTreatments,
   jobTimeEntries, jobPhotos, jobInvoiceItems,
@@ -16,6 +16,7 @@ import {
   type Mower, type InsertMower,
   type StaffMowerFavorite, type InsertStaffMowerFavorite,
   type JobTask, type InsertJobTask,
+  type TreatmentCategory, type InsertTreatmentCategory,
   type TreatmentType, type InsertTreatmentType,
   type TreatmentProgram, type InsertTreatmentProgram,
   type TreatmentProgramSchedule, type InsertTreatmentProgramSchedule,
@@ -95,6 +96,13 @@ export interface IStorage {
 
   // Applications
   createApplication(app: any): Promise<Application>;
+
+  // Treatment Categories
+  getTreatmentCategories(): Promise<TreatmentCategory[]>;
+  getTreatmentCategory(id: number): Promise<TreatmentCategory | undefined>;
+  createTreatmentCategory(category: InsertTreatmentCategory): Promise<TreatmentCategory>;
+  updateTreatmentCategory(id: number, updates: Partial<TreatmentCategory>): Promise<TreatmentCategory | undefined>;
+  deleteTreatmentCategory(id: number): Promise<boolean>;
 
   // Treatment Types
   getTreatmentTypes(): Promise<TreatmentType[]>;
@@ -407,6 +415,31 @@ export class DatabaseStorage implements IStorage {
   async deleteJobTask(id: number): Promise<boolean> {
     await db.delete(jobTasks).where(eq(jobTasks.id, id));
     return true;
+  }
+
+  // Treatment Categories
+  async getTreatmentCategories(): Promise<TreatmentCategory[]> {
+    return await db.select().from(treatmentCategories).where(eq(treatmentCategories.isActive, true)).orderBy(treatmentCategories.sortOrder);
+  }
+
+  async getTreatmentCategory(id: number): Promise<TreatmentCategory | undefined> {
+    const [category] = await db.select().from(treatmentCategories).where(eq(treatmentCategories.id, id));
+    return category;
+  }
+
+  async createTreatmentCategory(category: InsertTreatmentCategory): Promise<TreatmentCategory> {
+    const [newCategory] = await db.insert(treatmentCategories).values(category).returning();
+    return newCategory;
+  }
+
+  async updateTreatmentCategory(id: number, updates: Partial<TreatmentCategory>): Promise<TreatmentCategory | undefined> {
+    const [updated] = await db.update(treatmentCategories).set(updates).where(eq(treatmentCategories.id, id)).returning();
+    return updated;
+  }
+
+  async deleteTreatmentCategory(id: number): Promise<boolean> {
+    const [deleted] = await db.update(treatmentCategories).set({ isActive: false }).where(eq(treatmentCategories.id, id)).returning();
+    return !!deleted;
   }
 
   // Treatment Types

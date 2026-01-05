@@ -5,7 +5,7 @@ import { api } from "@shared/routes";
 import { 
   insertJobRunSchema, insertCrewSchema, updateCrewSchema, canViewMoney, canViewGateCode,
   insertClientContactSchema, insertMowerSchema, insertJobTaskSchema,
-  insertTreatmentTypeSchema, insertTreatmentProgramSchema, insertTreatmentProgramScheduleSchema,
+  insertTreatmentCategorySchema, insertTreatmentTypeSchema, insertTreatmentProgramSchema, insertTreatmentProgramScheduleSchema,
   insertProgramTemplateSchema, insertProgramTemplateTreatmentSchema,
   insertClientProgramSchema, insertJobTimeEntrySchema, insertJobPhotoSchema, insertJobInvoiceItemSchema
 } from "@shared/schema";
@@ -681,6 +681,57 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (err) {
       res.status(400).json({ message: "Invalid task ID" });
+    }
+  });
+
+  // Treatment Categories
+  app.get("/api/treatment-categories", async (req, res) => {
+    const categories = await storage.getTreatmentCategories();
+    res.json(categories);
+  });
+
+  app.post("/api/treatment-categories", async (req, res) => {
+    try {
+      const role = await getCurrentUserRole(req);
+      if (role !== "manager" && role !== "owner") {
+        return res.status(403).json({ message: "Only managers and owners can create treatment categories" });
+      }
+      const input = insertTreatmentCategorySchema.parse(req.body);
+      const category = await storage.createTreatmentCategory(input);
+      res.status(201).json(category);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  app.put("/api/treatment-categories/:id", async (req, res) => {
+    try {
+      const role = await getCurrentUserRole(req);
+      if (role !== "manager" && role !== "owner") {
+        return res.status(403).json({ message: "Only managers and owners can update treatment categories" });
+      }
+      const id = Number(req.params.id);
+      const updates = insertTreatmentCategorySchema.partial().parse(req.body);
+      const updated = await storage.updateTreatmentCategory(id, updates);
+      if (!updated) return res.status(404).json({ message: "Treatment category not found" });
+      res.json(updated);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  app.delete("/api/treatment-categories/:id", async (req, res) => {
+    try {
+      const role = await getCurrentUserRole(req);
+      if (role !== "manager" && role !== "owner") {
+        return res.status(403).json({ message: "Only managers and owners can delete treatment categories" });
+      }
+      const id = Number(req.params.id);
+      const deleted = await storage.deleteTreatmentCategory(id);
+      if (!deleted) return res.status(404).json({ message: "Treatment category not found" });
+      res.json({ success: true });
+    } catch (err) {
+      res.status(400).json({ message: "Failed to delete treatment category" });
     }
   });
 
