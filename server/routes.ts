@@ -877,10 +877,14 @@ export async function registerRoutes(
   app.get("/api/jobs/:id/photos", async (req, res) => {
     try {
       const jobId = Number(req.params.id);
+      if (isNaN(jobId)) {
+        return res.status(400).json({ message: "Invalid job ID" });
+      }
       const photos = await storage.getJobPhotos(jobId);
       res.json(photos);
     } catch (err) {
-      res.status(400).json({ message: "Invalid job ID" });
+      console.error("Error fetching job photos:", err);
+      res.status(500).json({ message: "Error fetching photos" });
     }
   });
 
@@ -896,6 +900,7 @@ export async function registerRoutes(
       const photo = await storage.createJobPhoto(input);
       res.status(201).json(photo);
     } catch (err) {
+      console.error("Error creating job photo:", err);
       res.status(400).json({ message: "Invalid input" });
     }
   });
