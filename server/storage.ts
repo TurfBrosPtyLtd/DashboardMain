@@ -4,6 +4,7 @@ import {
   clientContacts, mowers, staffMowerFavorites, jobTasks,
   treatmentTypes, programTemplates, programTemplateTreatments,
   clientPrograms, clientProgramServices, clientProgramTreatments,
+  jobTimeEntries, jobPhotos, jobInvoiceItems,
   type Staff, type InsertStaff,
   type Client, type InsertStaff as InsertClient,
   type Crew, type InsertCrew, type UpdateCrew,
@@ -19,9 +20,12 @@ import {
   type ProgramTemplateTreatment, type InsertProgramTemplateTreatment,
   type ClientProgram, type InsertClientProgram,
   type ClientProgramService, type InsertClientProgramService,
-  type ClientProgramTreatment, type InsertClientProgramTreatment
+  type ClientProgramTreatment, type InsertClientProgramTreatment,
+  type JobTimeEntry, type InsertJobTimeEntry,
+  type JobPhoto, type InsertJobPhoto,
+  type JobInvoiceItem, type InsertJobInvoiceItem
 } from "@shared/schema";
-import { eq, and, desc, gte, lt } from "drizzle-orm";
+import { eq, and, desc, gte, lt, isNull } from "drizzle-orm";
 
 export interface IStorage {
   // Staff
@@ -110,6 +114,24 @@ export interface IStorage {
   // Client Program Treatments
   getClientProgramTreatments(clientProgramId: number): Promise<(ClientProgramTreatment & { treatmentType: TreatmentType })[]>;
   updateClientProgramTreatment(id: number, updates: Partial<ClientProgramTreatment>): Promise<ClientProgramTreatment | undefined>;
+
+  // Job Time Entries
+  getJobTimeEntries(jobId: number): Promise<(JobTimeEntry & { staff: Staff })[]>;
+  getActiveTimeEntry(jobId: number, staffId: number): Promise<JobTimeEntry | undefined>;
+  getAnyActiveTimeEntry(jobId: number): Promise<JobTimeEntry | undefined>;
+  createJobTimeEntry(entry: InsertJobTimeEntry): Promise<JobTimeEntry>;
+  stopJobTimeEntry(id: number): Promise<JobTimeEntry | undefined>;
+
+  // Job Photos
+  getJobPhotos(jobId: number): Promise<JobPhoto[]>;
+  createJobPhoto(photo: InsertJobPhoto): Promise<JobPhoto>;
+  deleteJobPhoto(id: number): Promise<boolean>;
+
+  // Job Invoice Items
+  getJobInvoiceItems(jobId: number): Promise<JobInvoiceItem[]>;
+  createJobInvoiceItem(item: InsertJobInvoiceItem): Promise<JobInvoiceItem>;
+  updateJobInvoiceItem(id: number, updates: Partial<JobInvoiceItem>): Promise<JobInvoiceItem | undefined>;
+  deleteJobInvoiceItem(id: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -442,6 +464,88 @@ export class DatabaseStorage implements IStorage {
   async updateClientProgramTreatment(id: number, updates: Partial<ClientProgramTreatment>): Promise<ClientProgramTreatment | undefined> {
     const [updated] = await db.update(clientProgramTreatments).set(updates).where(eq(clientProgramTreatments.id, id)).returning();
     return updated;
+  }
+
+  // Job Time Entries
+  async getJobTimeEntries(jobId: number): Promise<(JobTimeEntry & { staff: Staff })[]> {
+    return await db.query.jobTimeEntries.findMany({
+      where: eq(jobTimeEntries.jobId, jobId),
+      with: { staff: true },
+      orderBy: desc(jobTimeEntries.startTime)
+    });
+  }
+
+  async getActiveTimeEntry(jobId: number, staffId: number): Promise<JobTimeEntry | undefined> {
+    const [entry] = await db.select().from(jobTimeEntries)
+      .where(and(
+        eq(jobTimeEntries.jobId, jobId),
+        eq(jobTimeEntries.staffId, staffId),
+        isNull(jobTimeEntries.endTime)
+      ));
+    return entry;
+  }
+
+  async getAnyActiveTimeEntry(jobId: number): Promise<JobTimeEntry | undefined> {
+    const [entry] = await db.select().from(jobTimeEntries)
+      .where(and(
+        eq(jobTimeEntries.jobId, jobId),
+        isNull(jobTimeEntries.endTime)
+      ));
+    return entry;
+  }
+
+  async createJobTimeEntry(entry: InsertJobTimeEntry): Promise<JobTimeEntry> {
+    const [newEntry] = await db.insert(jobTimeEntries).values(entry).returning();
+    return newEntry;
+  }
+
+  async stopJobTimeEntry(id: number): Promise<JobTimeEntry | undefined> {
+    const [entry] = await db.select().from(jobTimeEntries).where(eq(jobTimeEntries.id, id));
+    if (!entry || entry.endTime) return entry;
+    
+    const endTime = new Date();
+    const durationMinutes = Math.round((endTime.getTime() - new Date(entry.startTime).getTime()) / 60000);
+    
+    const [updated] = await db.update(jobTimeEntries)
+      .set({ endTime, durationMinutes })
+      .where(eq(jobTimeEntries.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Job Photos
+  async getJobPhotos(jobId: number): Promise<JobPhoto[]> {
+    return await db.select().from(jobPhotos).where(eq(jobPhotos.jobId, jobId)).orderBy(desc(jobPhotos.createdAt));
+  }
+
+  async createJobPhoto(photo: InsertJobPhoto): Promise<JobPhoto> {
+    const [newPhoto] = await db.insert(jobPhotos).values(photo).returning();
+    return newPhoto;
+  }
+
+  async deleteJobPhoto(id: number): Promise<boolean> {
+    await db.delete(jobPhotos).where(eq(jobPhotos.id, id));
+    return true;
+  }
+
+  // Job Invoice Items
+  async getJobInvoiceItems(jobId: number): Promise<JobInvoiceItem[]> {
+    return await db.select().from(jobInvoiceItems).where(eq(jobInvoiceItems.jobId, jobId)).orderBy(jobInvoiceItems.sortOrder);
+  }
+
+  async createJobInvoiceItem(item: InsertJobInvoiceItem): Promise<JobInvoiceItem> {
+    const [newItem] = await db.insert(jobInvoiceItems).values(item).returning();
+    return newItem;
+  }
+
+  async updateJobInvoiceItem(id: number, updates: Partial<JobInvoiceItem>): Promise<JobInvoiceItem | undefined> {
+    const [updated] = await db.update(jobInvoiceItems).set(updates).where(eq(jobInvoiceItems.id, id)).returning();
+    return updated;
+  }
+
+  async deleteJobInvoiceItem(id: number): Promise<boolean> {
+    await db.delete(jobInvoiceItems).where(eq(jobInvoiceItems.id, id));
+    return true;
   }
 }
 

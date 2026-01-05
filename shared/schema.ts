@@ -242,6 +242,45 @@ export const clientProgramTreatments = pgTable("client_program_treatments", {
   notes: text("notes"),
 });
 
+// Job time entries - timer system for tracking work hours
+export const jobTimeEntries = pgTable("job_time_entries", {
+  id: serial("id").primaryKey(),
+  jobId: integer("job_id").references(() => jobs.id).notNull(),
+  staffId: integer("staff_id").references(() => staff.id).notNull(),
+  crewId: integer("crew_id").references(() => crews.id), // If tracking for a crew
+  startTime: timestamp("start_time").notNull(),
+  endTime: timestamp("end_time"),
+  durationMinutes: integer("duration_minutes"), // Calculated when stopped
+  entryType: text("entry_type").default("self").notNull(), // 'self' or 'crew'
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Job photos - attachments with timestamps
+export const jobPhotos = pgTable("job_photos", {
+  id: serial("id").primaryKey(),
+  jobId: integer("job_id").references(() => jobs.id).notNull(),
+  staffId: integer("staff_id").references(() => staff.id),
+  url: text("url").notNull(),
+  filename: text("filename").notNull(),
+  photoType: text("photo_type").default("during").notNull(), // 'before', 'during', 'after'
+  caption: text("caption"),
+  takenAt: timestamp("taken_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Invoice line items for jobs
+export const jobInvoiceItems = pgTable("job_invoice_items", {
+  id: serial("id").primaryKey(),
+  jobId: integer("job_id").references(() => jobs.id).notNull(),
+  description: text("description").notNull(),
+  quantity: integer("quantity").default(1),
+  unitPrice: integer("unit_price").notNull(), // In cents
+  totalPrice: integer("total_price").notNull(), // In cents
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const clientsRelations = relations(clients, ({ many }) => ({
   jobs: many(jobs),
@@ -413,6 +452,39 @@ export const clientProgramTreatmentsRelations = relations(clientProgramTreatment
   }),
 }));
 
+export const jobTimeEntriesRelations = relations(jobTimeEntries, ({ one }) => ({
+  job: one(jobs, {
+    fields: [jobTimeEntries.jobId],
+    references: [jobs.id],
+  }),
+  staff: one(staff, {
+    fields: [jobTimeEntries.staffId],
+    references: [staff.id],
+  }),
+  crew: one(crews, {
+    fields: [jobTimeEntries.crewId],
+    references: [crews.id],
+  }),
+}));
+
+export const jobPhotosRelations = relations(jobPhotos, ({ one }) => ({
+  job: one(jobs, {
+    fields: [jobPhotos.jobId],
+    references: [jobs.id],
+  }),
+  staff: one(staff, {
+    fields: [jobPhotos.staffId],
+    references: [staff.id],
+  }),
+}));
+
+export const jobInvoiceItemsRelations = relations(jobInvoiceItems, ({ one }) => ({
+  job: one(jobs, {
+    fields: [jobInvoiceItems.jobId],
+    references: [jobs.id],
+  }),
+}));
+
 // Schemas
 export const insertStaffSchema = createInsertSchema(staff).omit({ id: true });
 export const insertClientSchema = createInsertSchema(clients).omit({ id: true });
@@ -438,6 +510,12 @@ export const insertProgramTemplateTreatmentSchema = createInsertSchema(programTe
 export const insertClientProgramSchema = createInsertSchema(clientPrograms).omit({ id: true, createdAt: true });
 export const insertClientProgramServiceSchema = createInsertSchema(clientProgramServices).omit({ id: true });
 export const insertClientProgramTreatmentSchema = createInsertSchema(clientProgramTreatments).omit({ id: true });
+export const insertJobTimeEntrySchema = createInsertSchema(jobTimeEntries).omit({ id: true, createdAt: true, durationMinutes: true }).extend({
+  startTime: z.union([z.date(), z.string().pipe(z.coerce.date())]),
+  endTime: z.union([z.date(), z.string().pipe(z.coerce.date())]).optional().nullable(),
+});
+export const insertJobPhotoSchema = createInsertSchema(jobPhotos).omit({ id: true, createdAt: true });
+export const insertJobInvoiceItemSchema = createInsertSchema(jobInvoiceItems).omit({ id: true, createdAt: true });
 
 // Types
 export type Staff = typeof staff.$inferSelect;
@@ -476,3 +554,9 @@ export type ClientProgramService = typeof clientProgramServices.$inferSelect;
 export type InsertClientProgramService = z.infer<typeof insertClientProgramServiceSchema>;
 export type ClientProgramTreatment = typeof clientProgramTreatments.$inferSelect;
 export type InsertClientProgramTreatment = z.infer<typeof insertClientProgramTreatmentSchema>;
+export type JobTimeEntry = typeof jobTimeEntries.$inferSelect;
+export type InsertJobTimeEntry = z.infer<typeof insertJobTimeEntrySchema>;
+export type JobPhoto = typeof jobPhotos.$inferSelect;
+export type InsertJobPhoto = z.infer<typeof insertJobPhotoSchema>;
+export type JobInvoiceItem = typeof jobInvoiceItems.$inferSelect;
+export type InsertJobInvoiceItem = z.infer<typeof insertJobInvoiceItemSchema>;

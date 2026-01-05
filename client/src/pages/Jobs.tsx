@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Layout } from "@/components/Layout";
 import { useJobs, useCreateJob, useUpdateJob, useDeleteJob } from "@/hooks/use-jobs";
 import { useClients } from "@/hooks/use-clients";
 import { useStaff, useCurrentStaff } from "@/hooks/use-users";
 import { useJobRuns, useCreateJobRun, useUpdateJobRun, useDeleteJobRun } from "@/hooks/use-job-runs";
 import { useCrews, useCreateCrew, useUpdateCrew, useDeleteCrew, useAddCrewMember, useRemoveCrewMember, type CrewWithMembers } from "@/hooks/use-crews";
+import { useJobTimeEntries, useStartTimer, useStopTimer } from "@/hooks/use-time-entries";
 import { useQuery } from "@tanstack/react-query";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, addDays, isSameDay, isToday } from "date-fns";
 import { MapPin, Clock, Plus, ChevronLeft, ChevronRight, Zap, Trash2, Pencil, Users, AlertCircle, Scissors, CalendarDays, MoreVertical, Check, SkipForward, ExternalLink, Navigation, Play, Square, Timer } from "lucide-react";
@@ -56,6 +57,7 @@ export default function Jobs() {
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [deleteJobId, setDeleteJobId] = useState<number | null>(null);
   const [staffNotes, setStaffNotes] = useState<string>("");
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   
   const { data: jobs, isLoading } = useJobs();
   const { data: clients } = useClients();
@@ -75,6 +77,49 @@ export default function Jobs() {
   const deleteCrew = useDeleteCrew();
   const addCrewMember = useAddCrewMember();
   const removeCrewMember = useRemoveCrewMember();
+  
+  const { data: timeEntries, refetch: refetchTimeEntries } = useJobTimeEntries(selectedJobId);
+  const startTimer = useStartTimer();
+  const stopTimer = useStopTimer();
+  
+  const activeTimeEntry = timeEntries?.find(e => !e.endTime);
+  
+  useEffect(() => {
+    if (!activeTimeEntry) {
+      setElapsedSeconds(0);
+      return;
+    }
+    
+    const startTime = new Date(activeTimeEntry.startTime).getTime();
+    const updateElapsed = () => {
+      setElapsedSeconds(Math.floor((Date.now() - startTime) / 1000));
+    };
+    
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1000);
+    
+    return () => clearInterval(interval);
+  }, [activeTimeEntry]);
+
+  const formatElapsedTime = (seconds: number): string => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    if (hrs > 0) {
+      return `${hrs}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+    }
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const handleStartTimer = async (entryType: "self" | "crew") => {
+    if (!selectedJobId) return;
+    await startTimer.mutateAsync({ jobId: selectedJobId, entryType });
+  };
+
+  const handleStopTimer = async () => {
+    if (!activeTimeEntry || !selectedJobId) return;
+    await stopTimer.mutateAsync({ entryId: activeTimeEntry.id, jobId: selectedJobId });
+  };
 
   const getSelectedClient = (): Client | undefined => {
     if (!selectedClientId) return undefined;
@@ -1415,22 +1460,72 @@ export default function Jobs() {
                         <Timer className="w-4 h-4" />
                         Timer
                       </h4>
-                      <div className="text-sm text-muted-foreground">Coming soon</div>
+                      {activeTimeEntry && (
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                          <span className="font-mono text-lg font-bold text-red-600 dark:text-red-400">
+                            {formatElapsedTime(elapsedSeconds)}
+                          </span>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button size="sm" variant="outline" disabled>
-                        <Play className="w-3 h-3 mr-1" />
-                        Start (Self)
-                      </Button>
-                      <Button size="sm" variant="outline" disabled>
-                        <Play className="w-3 h-3 mr-1" />
-                        Start (Crew)
-                      </Button>
-                      <Button size="sm" variant="outline" disabled>
-                        <Square className="w-3 h-3 mr-1" />
-                        Stop
-                      </Button>
-                    </div>
+                    
+                    {activeTimeEntry ? (
+                      <div className="space-y-2">
+                        <div className="text-sm text-muted-foreground">
+                          Started by {activeTimeEntry.staff?.name || "Unknown"} ({activeTimeEntry.entryType})
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="destructive" 
+                          onClick={handleStopTimer}
+                          disabled={stopTimer.isPending}
+                          data-testid="button-stop-timer"
+                        >
+                          <Square className="w-3 h-3 mr-1" />
+                          {stopTimer.isPending ? "Stopping..." : "Stop Timer"}
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          onClick={() => handleStartTimer("self")}
+                          disabled={startTimer.isPending}
+                          data-testid="button-start-timer-self"
+                        >
+                          <Play className="w-3 h-3 mr-1" />
+                          {startTimer.isPending ? "Starting..." : "Start (Self)"}
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          onClick={() => handleStartTimer("crew")}
+                          disabled={startTimer.isPending}
+                          data-testid="button-start-timer-crew"
+                        >
+                          <Play className="w-3 h-3 mr-1" />
+                          {startTimer.isPending ? "Starting..." : "Start (Crew)"}
+                        </Button>
+                      </div>
+                    )}
+                    
+                    {timeEntries && timeEntries.filter(e => e.endTime).length > 0 && (
+                      <div className="space-y-2 pt-2">
+                        <div className="text-xs text-muted-foreground">Previous Entries</div>
+                        <div className="space-y-1">
+                          {timeEntries.filter(e => e.endTime).slice(0, 5).map(entry => (
+                            <div key={entry.id} className="flex items-center justify-between text-sm bg-muted rounded px-2 py-1">
+                              <span>{entry.staff?.name || "Unknown"}</span>
+                              <span className="text-muted-foreground">
+                                {entry.durationMinutes ? `${entry.durationMinutes} min` : "-"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {selectedJob.notes && (

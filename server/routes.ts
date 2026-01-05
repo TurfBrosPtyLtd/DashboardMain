@@ -6,7 +6,7 @@ import {
   insertJobRunSchema, insertCrewSchema, updateCrewSchema, canViewMoney, canViewGateCode,
   insertClientContactSchema, insertMowerSchema, insertJobTaskSchema,
   insertTreatmentTypeSchema, insertProgramTemplateSchema, insertProgramTemplateTreatmentSchema,
-  insertClientProgramSchema
+  insertClientProgramSchema, insertJobTimeEntrySchema, insertJobPhotoSchema, insertJobInvoiceItemSchema
 } from "@shared/schema";
 import { z } from "zod";
 import OpenAI from "openai";
@@ -788,6 +788,153 @@ export async function registerRoutes(
       res.json(treatment);
     } catch (err) {
       res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  // Job Time Entries
+  app.get("/api/jobs/:id/time-entries", async (req, res) => {
+    try {
+      const jobId = Number(req.params.id);
+      const entries = await storage.getJobTimeEntries(jobId);
+      res.json(entries);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid job ID" });
+    }
+  });
+
+  app.post("/api/jobs/:id/time-entries/start", async (req, res) => {
+    try {
+      const jobId = Number(req.params.id);
+      const staffId = await getCurrentStaffId(req);
+      if (!staffId) return res.status(401).json({ message: "Not authenticated" });
+      
+      const existingEntry = await storage.getAnyActiveTimeEntry(jobId);
+      if (existingEntry) {
+        return res.status(400).json({ message: "Timer already running for this job" });
+      }
+      
+      const input = insertJobTimeEntrySchema.parse({
+        jobId,
+        staffId,
+        startTime: new Date(),
+        entryType: req.body.entryType || "self",
+        crewId: req.body.crewId || null,
+        notes: req.body.notes || null
+      });
+      const entry = await storage.createJobTimeEntry(input);
+      res.status(201).json(entry);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  app.post("/api/time-entries/:id/stop", async (req, res) => {
+    try {
+      const entryId = Number(req.params.id);
+      const entry = await storage.stopJobTimeEntry(entryId);
+      if (!entry) return res.status(404).json({ message: "Time entry not found" });
+      res.json(entry);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid time entry ID" });
+    }
+  });
+
+  // Job Photos
+  app.get("/api/jobs/:id/photos", async (req, res) => {
+    try {
+      const jobId = Number(req.params.id);
+      const photos = await storage.getJobPhotos(jobId);
+      res.json(photos);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid job ID" });
+    }
+  });
+
+  app.post("/api/jobs/:id/photos", async (req, res) => {
+    try {
+      const jobId = Number(req.params.id);
+      const staffId = await getCurrentStaffId(req);
+      const input = insertJobPhotoSchema.parse({
+        ...req.body,
+        jobId,
+        staffId
+      });
+      const photo = await storage.createJobPhoto(input);
+      res.status(201).json(photo);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  app.delete("/api/photos/:id", async (req, res) => {
+    try {
+      const photoId = Number(req.params.id);
+      await storage.deleteJobPhoto(photoId);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(400).json({ message: "Invalid photo ID" });
+    }
+  });
+
+  // Job Invoice Items
+  app.get("/api/jobs/:id/invoice-items", async (req, res) => {
+    try {
+      const role = await getCurrentUserRole(req);
+      if (!canViewMoney(role)) {
+        return res.status(403).json({ message: "Not authorized to view invoice items" });
+      }
+      const jobId = Number(req.params.id);
+      const items = await storage.getJobInvoiceItems(jobId);
+      res.json(items);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid job ID" });
+    }
+  });
+
+  app.post("/api/jobs/:id/invoice-items", async (req, res) => {
+    try {
+      const role = await getCurrentUserRole(req);
+      if (!canViewMoney(role)) {
+        return res.status(403).json({ message: "Not authorized to manage invoice items" });
+      }
+      const jobId = Number(req.params.id);
+      const input = insertJobInvoiceItemSchema.parse({
+        ...req.body,
+        jobId
+      });
+      const item = await storage.createJobInvoiceItem(input);
+      res.status(201).json(item);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  app.put("/api/invoice-items/:id", async (req, res) => {
+    try {
+      const role = await getCurrentUserRole(req);
+      if (!canViewMoney(role)) {
+        return res.status(403).json({ message: "Not authorized to manage invoice items" });
+      }
+      const itemId = Number(req.params.id);
+      const item = await storage.updateJobInvoiceItem(itemId, req.body);
+      if (!item) return res.status(404).json({ message: "Invoice item not found" });
+      res.json(item);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  app.delete("/api/invoice-items/:id", async (req, res) => {
+    try {
+      const role = await getCurrentUserRole(req);
+      if (!canViewMoney(role)) {
+        return res.status(403).json({ message: "Not authorized to manage invoice items" });
+      }
+      const itemId = Number(req.params.id);
+      await storage.deleteJobInvoiceItem(itemId);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(400).json({ message: "Invalid invoice item ID" });
     }
   });
 
