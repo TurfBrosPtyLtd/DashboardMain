@@ -5,7 +5,7 @@ import { useClients } from "@/hooks/use-clients";
 import { useStaff, useCurrentStaff } from "@/hooks/use-users";
 import { useJobRuns, useCreateJobRun, useUpdateJobRun, useDeleteJobRun } from "@/hooks/use-job-runs";
 import { useCrews, useCreateCrew, useUpdateCrew, useDeleteCrew, useAddCrewMember, useRemoveCrewMember, type CrewWithMembers } from "@/hooks/use-crews";
-import { useJobTimeEntries, useStartTimer, useStopTimer } from "@/hooks/use-time-entries";
+import { useJobTimeEntries, useStartTimer, useStopTimer, useDeleteTimeEntry } from "@/hooks/use-time-entries";
 import { useQuery } from "@tanstack/react-query";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, addDays, isSameDay, isToday } from "date-fns";
 import { MapPin, Clock, Plus, ChevronLeft, ChevronRight, Zap, Trash2, Pencil, Users, AlertCircle, Scissors, CalendarDays, MoreVertical, Check, SkipForward, ExternalLink, Navigation, Play, Square, Timer } from "lucide-react";
@@ -81,6 +81,7 @@ export default function Jobs() {
   const { data: timeEntries, refetch: refetchTimeEntries } = useJobTimeEntries(selectedJobId);
   const startTimer = useStartTimer();
   const stopTimer = useStopTimer();
+  const deleteTimeEntry = useDeleteTimeEntry();
   
   const activeTimeEntry = timeEntries?.find(e => !e.endTime);
   
@@ -119,6 +120,11 @@ export default function Jobs() {
   const handleStopTimer = async () => {
     if (!activeTimeEntry || !selectedJobId) return;
     await stopTimer.mutateAsync({ entryId: activeTimeEntry.id, jobId: selectedJobId });
+  };
+
+  const handleDeleteTimeEntry = async (entryId: number) => {
+    if (!selectedJobId) return;
+    await deleteTimeEntry.mutateAsync({ entryId, jobId: selectedJobId });
   };
 
   const getSelectedClient = (): Client | undefined => {
@@ -1473,7 +1479,7 @@ export default function Jobs() {
                     {activeTimeEntry ? (
                       <div className="space-y-2">
                         <div className="text-sm text-muted-foreground">
-                          Started by {activeTimeEntry.staff?.name || "Unknown"} ({activeTimeEntry.entryType})
+                          Started by {activeTimeEntry.staff?.name || "Unknown"} ({activeTimeEntry.entryType === "crew" ? "Crew" : "Self"})
                         </div>
                         <Button 
                           size="sm" 
@@ -1483,7 +1489,7 @@ export default function Jobs() {
                           data-testid="button-stop-timer"
                         >
                           <Square className="w-3 h-3 mr-1" />
-                          {stopTimer.isPending ? "Stopping..." : "Stop Timer"}
+                          {stopTimer.isPending ? "Stopping..." : `Stop (${activeTimeEntry.entryType === "crew" ? "Crew" : "Self"})`}
                         </Button>
                       </div>
                     ) : (
@@ -1516,11 +1522,29 @@ export default function Jobs() {
                         <div className="text-xs text-muted-foreground">Previous Entries</div>
                         <div className="space-y-1">
                           {timeEntries.filter(e => e.endTime).slice(0, 5).map(entry => (
-                            <div key={entry.id} className="flex items-center justify-between text-sm bg-muted rounded px-2 py-1">
-                              <span>{entry.staff?.name || "Unknown"}</span>
-                              <span className="text-muted-foreground">
-                                {entry.durationMinutes ? `${entry.durationMinutes} min` : "-"}
-                              </span>
+                            <div key={entry.id} className="flex items-center justify-between gap-2 text-sm bg-muted rounded px-2 py-1">
+                              <div className="flex items-center gap-2">
+                                <span>{entry.staff?.name || "Unknown"}</span>
+                                <Badge variant="outline" className="text-xs">
+                                  {entry.entryType === "crew" ? "Crew" : "Self"}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-muted-foreground">
+                                  {entry.durationMinutes ? `${entry.durationMinutes} min` : "-"}
+                                </span>
+                                {canViewMoney && (
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => handleDeleteTimeEntry(entry.id)}
+                                    disabled={deleteTimeEntry.isPending}
+                                    data-testid={`button-delete-time-entry-${entry.id}`}
+                                  >
+                                    <Trash2 className="w-3 h-3 text-destructive" />
+                                  </Button>
+                                )}
+                              </div>
                             </div>
                           ))}
                         </div>

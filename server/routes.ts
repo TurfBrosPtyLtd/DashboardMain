@@ -839,6 +839,20 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/time-entries/:id", async (req, res) => {
+    try {
+      const role = await getCurrentUserRole(req);
+      if (!canViewMoney(role)) {
+        return res.status(403).json({ message: "Not authorized to delete time entries" });
+      }
+      const entryId = Number(req.params.id);
+      await storage.deleteJobTimeEntry(entryId);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(400).json({ message: "Invalid time entry ID" });
+    }
+  });
+
   // Job Photos
   app.get("/api/jobs/:id/photos", async (req, res) => {
     try {

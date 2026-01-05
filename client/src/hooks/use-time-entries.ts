@@ -41,3 +41,14 @@ export function useStopTimer() {
     }
   });
 }
+
+export function useDeleteTimeEntry() {
+  return useMutation({
+    mutationFn: async ({ entryId, jobId }: { entryId: number; jobId: number }) => {
+      return apiRequest("DELETE", `/api/time-entries/${entryId}`);
+    },
+    onSuccess: (_, { jobId }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId, "time-entries"] });
+    }
+  });
+}

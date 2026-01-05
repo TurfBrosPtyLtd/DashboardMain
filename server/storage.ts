@@ -121,6 +121,7 @@ export interface IStorage {
   getAnyActiveTimeEntry(jobId: number): Promise<JobTimeEntry | undefined>;
   createJobTimeEntry(entry: InsertJobTimeEntry): Promise<JobTimeEntry>;
   stopJobTimeEntry(id: number): Promise<JobTimeEntry | undefined>;
+  deleteJobTimeEntry(id: number): Promise<boolean>;
 
   // Job Photos
   getJobPhotos(jobId: number): Promise<JobPhoto[]>;
@@ -511,6 +512,11 @@ export class DatabaseStorage implements IStorage {
       .where(eq(jobTimeEntries.id, id))
       .returning();
     return updated;
+  }
+
+  async deleteJobTimeEntry(id: number): Promise<boolean> {
+    await db.delete(jobTimeEntries).where(eq(jobTimeEntries.id, id));
+    return true;
   }
 
   // Job Photos
