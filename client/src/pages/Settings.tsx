@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { useStaff, useCurrentStaff } from "@/hooks/use-users";
@@ -14,7 +14,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { STAFF_ROLES, MOWER_TYPES, type Staff, type Mower, type TreatmentType, type ProgramTemplate } from "@shared/schema";
-import { Users, Shield, Save, Plus, Pencil, Leaf, Calendar, Tractor, Droplet, Bug, FlaskConical, CircleDot, Droplets } from "lucide-react";
+import { getServicesArray } from "@shared/serviceDistribution";
+import { Users, Shield, Save, Plus, Pencil, Leaf, Calendar, Tractor, Droplet, Bug, FlaskConical, CircleDot, Droplets, Calculator, RefreshCw } from "lucide-react";
 
 function MowerIcon({ type }: { type: string }) {
   switch (type) {
@@ -71,6 +72,41 @@ export default function Settings() {
   const [mowerDialogOpen, setMowerDialogOpen] = useState(false);
   const [treatmentDialogOpen, setTreatmentDialogOpen] = useState(false);
   const [programDialogOpen, setProgramDialogOpen] = useState(false);
+  const [editingProgram, setEditingProgram] = useState<ProgramTemplate | null>(null);
+  
+  const currentYear = new Date().getFullYear();
+  const [programYear, setProgramYear] = useState(currentYear);
+  const [programCadence, setProgramCadence] = useState<"two_week" | "four_week">("two_week");
+  const [programServices, setProgramServices] = useState(24);
+  const [monthlyValues, setMonthlyValues] = useState<number[]>(Array(12).fill(2));
+  
+  const handleAutoCalculate = () => {
+    const distribution = getServicesArray({
+      year: programYear,
+      annualServices: programServices,
+      cadence: programCadence
+    });
+    setMonthlyValues(distribution);
+  };
+  
+  const monthlyTotal = monthlyValues.reduce((a, b) => a + b, 0);
+  
+  const openEditProgram = (program: ProgramTemplate) => {
+    setEditingProgram(program);
+    const months = parseServicesPerMonth(program.servicesPerMonth);
+    setMonthlyValues(months);
+    setProgramServices(program.servicesPerYear);
+    setProgramCadence((program.defaultCadence as "two_week" | "four_week") || "two_week");
+    setProgramDialogOpen(true);
+  };
+  
+  const resetProgramForm = () => {
+    setEditingProgram(null);
+    setMonthlyValues(Array(12).fill(2));
+    setProgramServices(24);
+    setProgramCadence("two_week");
+    setProgramYear(currentYear);
+  };
 
   const handleRoleChange = (staffId: number, newRole: string) => {
     setEditingStaff(prev => ({ ...prev, [staffId]: newRole }));
@@ -153,27 +189,32 @@ export default function Settings() {
     }
   };
 
-  const handleCreateProgram = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSaveProgram = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = e.currentTarget;
     const formData = new FormData(form);
-    const servicesPerMonth = Array.from({ length: 12 }, (_, i) => 
-      Number(formData.get(`month${i}`) || 2)
-    );
+    
+    const payload = {
+      name: String(formData.get("name") || ""),
+      description: formData.get("description") ? String(formData.get("description")) : null,
+      servicesPerYear: monthlyTotal,
+      servicesPerMonth: monthlyValues,
+      defaultCadence: programCadence,
+    };
+    
     try {
-      await apiRequest("POST", "/api/program-templates", {
-        name: String(formData.get("name") || ""),
-        description: formData.get("description") ? String(formData.get("description")) : null,
-        servicesPerYear: servicesPerMonth.reduce((a, b) => a + b, 0),
-        servicesPerMonth,
-        defaultCadence: String(formData.get("defaultCadence") || "two_week"),
-      });
+      if (editingProgram) {
+        await apiRequest("PUT", `/api/program-templates/${editingProgram.id}`, payload);
+        toast({ title: "Program template updated successfully" });
+      } else {
+        await apiRequest("POST", "/api/program-templates", payload);
+        toast({ title: "Program template created successfully" });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/program-templates"] });
-      toast({ title: "Program template created successfully" });
       setProgramDialogOpen(false);
-      form.reset();
+      resetProgramForm();
     } catch (error) {
-      toast({ title: "Failed to create program template", variant: "destructive" });
+      toast({ title: editingProgram ? "Failed to update program" : "Failed to create program", variant: "destructive" });
     }
   };
 
@@ -499,50 +540,119 @@ export default function Settings() {
                     <CardTitle>Program Templates</CardTitle>
                   </div>
                   {isManager && (
-                    <Dialog open={programDialogOpen} onOpenChange={setProgramDialogOpen}>
+                    <Dialog open={programDialogOpen} onOpenChange={(open) => {
+                      setProgramDialogOpen(open);
+                      if (!open) resetProgramForm();
+                    }}>
                       <DialogTrigger asChild>
                         <Button size="sm" data-testid="button-add-program">
                           <Plus className="w-4 h-4 mr-1" />
                           Add Program
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="max-w-lg">
+                      <DialogContent className="max-w-2xl">
                         <DialogHeader>
-                          <DialogTitle>Create Program Template</DialogTitle>
+                          <DialogTitle>{editingProgram ? "Edit Program Template" : "Create Program Template"}</DialogTitle>
                         </DialogHeader>
-                        <form onSubmit={handleCreateProgram} className="space-y-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="program-name">Name</Label>
-                            <Input id="program-name" name="name" required data-testid="input-program-name" />
+                        <form onSubmit={handleSaveProgram} className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="program-name">Name</Label>
+                              <Input 
+                                id="program-name" 
+                                name="name" 
+                                required 
+                                defaultValue={editingProgram?.name || ""}
+                                data-testid="input-program-name" 
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="program-services">Total Services/Year</Label>
+                              <Select 
+                                value={String(programServices)} 
+                                onValueChange={(v) => setProgramServices(Number(v))}
+                              >
+                                <SelectTrigger data-testid="select-program-services">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="22">22 services (Essentials)</SelectItem>
+                                  <SelectItem value="24">24 services (Elite)</SelectItem>
+                                  <SelectItem value="26">26 services (Prestige)</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
                           </div>
                           <div className="space-y-2">
                             <Label htmlFor="program-desc">Description</Label>
-                            <Textarea id="program-desc" name="description" data-testid="input-program-description" />
+                            <Textarea 
+                              id="program-desc" 
+                              name="description" 
+                              defaultValue={editingProgram?.description || ""}
+                              data-testid="input-program-description" 
+                            />
+                          </div>
+                          <div className="grid grid-cols-3 gap-4">
+                            <div className="space-y-2">
+                              <Label>Year</Label>
+                              <Select value={String(programYear)} onValueChange={(v) => setProgramYear(Number(v))}>
+                                <SelectTrigger data-testid="select-program-year">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {[currentYear, currentYear + 1, currentYear + 2].map(y => (
+                                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Cadence</Label>
+                              <Select value={programCadence} onValueChange={(v) => setProgramCadence(v as "two_week" | "four_week")}>
+                                <SelectTrigger data-testid="select-program-cadence">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="two_week">Every 2 weeks</SelectItem>
+                                  <SelectItem value="four_week">Every 4 weeks</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>&nbsp;</Label>
+                              <Button 
+                                type="button" 
+                                variant="outline" 
+                                className="w-full"
+                                onClick={handleAutoCalculate}
+                                data-testid="button-auto-calculate"
+                              >
+                                <Calculator className="w-4 h-4 mr-1" />
+                                Auto Calculate
+                              </Button>
+                            </div>
                           </div>
                           <div className="space-y-2">
-                            <Label htmlFor="program-cadence">Default Cadence</Label>
-                            <Select name="defaultCadence" defaultValue="two_week">
-                              <SelectTrigger data-testid="select-program-cadence">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="two_week">Every 2 weeks</SelectItem>
-                                <SelectItem value="four_week">Every 4 weeks</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Services Per Month</Label>
+                            <div className="flex items-center justify-between">
+                              <Label>Services Per Month</Label>
+                              <Badge variant={monthlyTotal === programServices ? "default" : "destructive"}>
+                                Total: {monthlyTotal} / {programServices}
+                              </Badge>
+                            </div>
                             <div className="grid grid-cols-6 gap-2">
                               {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((month, i) => (
                                 <div key={month} className="text-center">
                                   <Label className="text-xs text-muted-foreground">{month}</Label>
                                   <Input
                                     type="number"
-                                    name={`month${i}`}
-                                    defaultValue="2"
+                                    value={monthlyValues[i]}
+                                    onChange={(e) => {
+                                      const newValues = [...monthlyValues];
+                                      newValues[i] = Number(e.target.value) || 0;
+                                      setMonthlyValues(newValues);
+                                    }}
                                     min="0"
-                                    max="4"
+                                    max="5"
                                     className="text-center"
                                     data-testid={`input-month-${i}`}
                                   />
@@ -550,9 +660,19 @@ export default function Settings() {
                               ))}
                             </div>
                           </div>
-                          <Button type="submit" className="w-full" data-testid="button-submit-program">
-                            Create Program
+                          <Button 
+                            type="submit" 
+                            className="w-full" 
+                            disabled={monthlyTotal !== programServices}
+                            data-testid="button-submit-program"
+                          >
+                            {editingProgram ? "Update Program" : "Create Program"}
                           </Button>
+                          {monthlyTotal !== programServices && (
+                            <p className="text-sm text-destructive text-center">
+                              Monthly services must add up to {programServices}. Currently: {monthlyTotal}
+                            </p>
+                          )}
                         </form>
                       </DialogContent>
                     </Dialog>
@@ -578,7 +698,19 @@ export default function Settings() {
                             <p className="font-semibold text-lg">{program.name}</p>
                             <p className="text-sm text-muted-foreground">{program.description}</p>
                           </div>
-                          <Badge>{program.servicesPerYear} services/year</Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge>{program.servicesPerYear} services/year</Badge>
+                            {isManager && (
+                              <Button 
+                                size="icon" 
+                                variant="ghost"
+                                onClick={() => openEditProgram(program)}
+                                data-testid={`button-edit-program-${program.id}`}
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                            )}
+                          </div>
                         </div>
                         <div className="grid grid-cols-12 gap-1">
                           {["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"].map((m, i) => (
