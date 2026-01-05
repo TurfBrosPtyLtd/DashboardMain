@@ -71,13 +71,11 @@ const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "Ju
 function TreatmentProgramScheduleSection({ 
   programId, 
   treatmentTypes, 
-  isManager,
-  onAddSchedule 
+  isManager 
 }: { 
   programId: number; 
   treatmentTypes: TreatmentType[]; 
   isManager: boolean;
-  onAddSchedule: () => void;
 }) {
   const { data: program } = useQuery<TreatmentProgramWithSchedule>({ 
     queryKey: ["/api/treatment-programs", programId] 
@@ -103,14 +101,8 @@ function TreatmentProgramScheduleSection({
 
   return (
     <div className="border-t border-border p-4">
-      <div className="flex items-center justify-between gap-2 mb-3">
+      <div className="mb-3">
         <h4 className="font-medium text-sm text-muted-foreground">Monthly Treatment Schedule</h4>
-        {isManager && (
-          <Button size="sm" variant="outline" onClick={onAddSchedule} data-testid={`button-add-schedule-${programId}`}>
-            <Plus className="w-3 h-3 mr-1" />
-            Add Treatment
-          </Button>
-        )}
       </div>
       {schedules.length === 0 ? (
         <p className="text-sm text-muted-foreground text-center py-4">
@@ -850,27 +842,52 @@ export default function Settings() {
                         </div>
                         <div className="flex items-center gap-2">
                           {isManager && (
-                            <Button 
-                              size="icon" 
-                              variant="ghost" 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingTreatmentProgram(program);
-                                setTreatmentProgramDialogOpen(true);
-                              }}
-                              data-testid={`button-edit-treatment-program-${program.id}`}
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </Button>
+                            <>
+                              <Button 
+                                size="sm"
+                                variant="outline"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedTreatmentProgramForSchedule(program.id);
+                                  setAddScheduleDialogOpen(true);
+                                }}
+                                data-testid={`button-add-schedule-${program.id}`}
+                              >
+                                <Plus className="w-3 h-3 mr-1" />
+                                Add Treatment
+                              </Button>
+                              <Button 
+                                size="icon" 
+                                variant="ghost" 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingTreatmentProgram(program);
+                                  setTreatmentProgramDialogOpen(true);
+                                }}
+                                data-testid={`button-edit-treatment-program-${program.id}`}
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                            </>
                           )}
                           <Badge variant={program.isActive ? "default" : "outline"}>
                             {program.isActive ? "Active" : "Inactive"}
                           </Badge>
-                          {expandedTreatmentProgram === program.id ? (
-                            <ChevronUp className="w-4 h-4 text-muted-foreground" />
-                          ) : (
-                            <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                          )}
+                          <Button 
+                            size="icon" 
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedTreatmentProgram(expandedTreatmentProgram === program.id ? null : program.id);
+                            }}
+                            data-testid={`button-expand-treatment-program-${program.id}`}
+                          >
+                            {expandedTreatmentProgram === program.id ? (
+                              <ChevronUp className="w-4 h-4" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4" />
+                            )}
+                          </Button>
                         </div>
                       </div>
                       
@@ -879,10 +896,6 @@ export default function Settings() {
                           programId={program.id}
                           treatmentTypes={treatmentTypes || []}
                           isManager={isManager}
-                          onAddSchedule={() => {
-                            setSelectedTreatmentProgramForSchedule(program.id);
-                            setAddScheduleDialogOpen(true);
-                          }}
                         />
                       )}
                     </div>
