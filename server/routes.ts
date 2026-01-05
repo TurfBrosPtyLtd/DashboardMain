@@ -402,6 +402,16 @@ export async function registerRoutes(
     res.json(sanitizeJobData(job, canViewPrice, canViewGate));
   });
 
+  app.delete(api.jobs.delete.path, async (req, res) => {
+    try {
+      const jobId = Number(req.params.id);
+      await storage.deleteJob(jobId);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(404).json({ message: "Job not found" });
+    }
+  });
+
   // Feedback with AI Analysis
   app.post(api.feedback.create.path, async (req, res) => {
     try {

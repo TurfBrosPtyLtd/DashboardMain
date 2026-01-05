@@ -80,3 +80,20 @@ export function useUpdateJob() {
     },
   });
 }
+
+export function useDeleteJob() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const url = buildUrl(api.jobs.delete.path, { id });
+      const res = await fetch(url, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to delete job");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.jobs.list.path] });
+    },
+  });
+}

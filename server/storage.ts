@@ -72,6 +72,7 @@ export interface IStorage {
   getJob(id: number): Promise<(Job & { client: Client, applications: Application[], tasks: JobTask[] }) | undefined>;
   createJob(job: any): Promise<Job>;
   updateJob(id: number, updates: any): Promise<Job>;
+  deleteJob(id: number): Promise<boolean>;
 
   // Job Tasks
   getJobTasks(jobId: number): Promise<JobTask[]>;
@@ -252,6 +253,14 @@ export class DatabaseStorage implements IStorage {
   async updateJob(id: number, updates: any): Promise<Job> {
     const [updatedJob] = await db.update(jobs).set(updates).where(eq(jobs.id, id)).returning();
     return updatedJob;
+  }
+
+  async deleteJob(id: number): Promise<boolean> {
+    await db.delete(jobTasks).where(eq(jobTasks.jobId, id));
+    await db.delete(feedback).where(eq(feedback.jobId, id));
+    await db.delete(applications).where(eq(applications.jobId, id));
+    await db.delete(jobs).where(eq(jobs.id, id));
+    return true;
   }
 
   async createFeedback(feedbackData: any): Promise<Feedback> {

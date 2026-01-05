@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { Layout } from "@/components/Layout";
-import { useJobs, useCreateJob, useUpdateJob } from "@/hooks/use-jobs";
+import { useJobs, useCreateJob, useUpdateJob, useDeleteJob } from "@/hooks/use-jobs";
 import { useClients } from "@/hooks/use-clients";
 import { useStaff, useCurrentStaff } from "@/hooks/use-users";
 import { useJobRuns, useCreateJobRun, useUpdateJobRun, useDeleteJobRun } from "@/hooks/use-job-runs";
 import { useCrews, useCreateCrew, useUpdateCrew, useDeleteCrew, useAddCrewMember, useRemoveCrewMember, type CrewWithMembers } from "@/hooks/use-crews";
 import { useQuery } from "@tanstack/react-query";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, addDays, isSameDay, isToday } from "date-fns";
-import { MapPin, Clock, Plus, ChevronLeft, ChevronRight, Zap, Trash2, Pencil, Users, AlertCircle, Scissors, CalendarDays } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { MapPin, Clock, Plus, ChevronLeft, ChevronRight, Zap, Trash2, Pencil, Users, AlertCircle, Scissors, CalendarDays, MoreVertical, Check, SkipForward, ExternalLink, Navigation, Play, Square, Timer } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,14 +17,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { Link } from "wouter";
-import type { JobRun, Crew, Staff, Mower, Client } from "@shared/schema";
+import type { JobRun, Crew, Staff, Mower, Client, Job, JobTask } from "@shared/schema";
 import { X } from "lucide-react";
 
 type ViewType = "daily" | "weekly" | "monthly";
@@ -51,6 +53,10 @@ export default function Jobs() {
   const [newJobTasks, setNewJobTasks] = useState<string[]>([]);
   const [newTaskInput, setNewTaskInput] = useState("");
   
+  const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
+  const [deleteJobId, setDeleteJobId] = useState<number | null>(null);
+  const [staffNotes, setStaffNotes] = useState<string>("");
+  
   const { data: jobs, isLoading } = useJobs();
   const { data: clients } = useClients();
   const { data: staff } = useStaff();
@@ -60,6 +66,7 @@ export default function Jobs() {
   const { data: crews, refetch: refetchCrews } = useCrews();
   const createJob = useCreateJob();
   const updateJob = useUpdateJob();
+  const deleteJob = useDeleteJob();
   const createJobRun = useCreateJobRun();
   const updateJobRun = useUpdateJobRun();
   const deleteJobRun = useDeleteJobRun();
@@ -268,6 +275,74 @@ export default function Jobs() {
     return staff?.filter(s => !assignedStaffIds.includes(s.id)) || [];
   };
 
+  const selectedJob = selectedJobId ? jobs?.find(j => j.id === selectedJobId) : null;
+  
+  const getClientContacts = (clientId: number) => {
+    const client = clients?.find(c => c.id === clientId);
+    return client ? [{ name: client.name, email: client.email, phone: client.phone, role: "resident" }] : [];
+  };
+
+  const getProgramProgress = (clientId: number, programTier: string | null | undefined) => {
+    if (!programTier || !jobs) return { completed: 0, total: parseInt(programTier || "0", 10) };
+    const clientJobs = jobs.filter(j => j.clientId === clientId && j.programTier === programTier);
+    const completed = clientJobs.filter(j => j.status === "completed").length;
+    return { completed, total: parseInt(programTier, 10) };
+  };
+
+  const getMowerInfo = (mowerId: number | null | undefined) => {
+    if (!mowerId) return null;
+    return mowers?.find(m => m.id === mowerId);
+  };
+
+  const formatCutHeight = (unit: string | null | undefined, value: string | null | undefined) => {
+    if (!value) return null;
+    switch (unit) {
+      case "level": return `Level ${value}`;
+      case "millimeter": return `${value}mm`;
+      case "inch": return `${value}"`;
+      default: return value;
+    }
+  };
+
+  const getScheduleFrequency = (programTier: string | null | undefined) => {
+    return "Every 2 weeks";
+  };
+
+  const openMapsApp = (address: string) => {
+    const encodedAddress = encodeURIComponent(address);
+    window.open(`https://www.google.com/maps/search/?api=1&query=${encodedAddress}`, "_blank");
+  };
+
+  const handleJobClick = (jobId: number) => {
+    setSelectedJobId(jobId);
+    const job = jobs?.find(j => j.id === jobId);
+    if (job) {
+      setStaffNotes(job.jobNotes || "");
+    }
+  };
+
+  const handleCompleteJob = async (jobId: number) => {
+    await updateJob.mutateAsync({ id: jobId, status: "completed" });
+    setSelectedJobId(null);
+  };
+
+  const handleSkipJob = async (jobId: number) => {
+    await updateJob.mutateAsync({ id: jobId, status: "cancelled" });
+    setSelectedJobId(null);
+  };
+
+  const handleDeleteJobConfirm = async () => {
+    if (deleteJobId) {
+      await deleteJob.mutateAsync(deleteJobId);
+      setDeleteJobId(null);
+      setSelectedJobId(null);
+    }
+  };
+
+  const handleSaveStaffNotes = async (jobId: number) => {
+    await updateJob.mutateAsync({ id: jobId, jobNotes: staffNotes });
+  };
+
   const getDaysToDisplay = () => {
     if (viewType === "monthly") {
       const monthStart = startOfMonth(currentDate);
@@ -312,11 +387,14 @@ export default function Jobs() {
             </div>
           )}
           {runJobs.slice(0, 1).map(job => (
-            <Link key={job.id} href={`/jobs/${job.id}`}>
-              <div className="text-xs p-0.5 truncate cursor-pointer hover:opacity-80">
-                {job.client.name}
-              </div>
-            </Link>
+            <div 
+              key={job.id} 
+              onClick={(e) => { e.stopPropagation(); handleJobClick(job.id); }}
+              className="text-xs p-0.5 truncate cursor-pointer hover:opacity-80"
+              data-testid={`job-tile-compact-${job.id}`}
+            >
+              {job.client.name}
+            </div>
           ))}
           {runJobs.length > 1 && (
             <div className="text-muted-foreground">+{runJobs.length - 1} more</div>
@@ -355,24 +433,28 @@ export default function Jobs() {
         ) : (
           <div className="space-y-2">
             {runJobs.map(job => (
-              <Link key={job.id} href={`/jobs/${job.id}`}>
-                <div className="p-3 rounded border border-border hover:shadow-md transition-all cursor-pointer bg-card">
-                  <div className="flex justify-between items-start mb-1">
-                    <h5 className="font-semibold">{job.client.name}</h5>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      job.status === 'completed' ? 'bg-green-100 dark:bg-green-900 text-green-900 dark:text-green-100' :
-                      job.status === 'in_progress' ? 'bg-amber-100 dark:bg-amber-900 text-amber-900 dark:text-amber-100' :
-                      'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
-                    }`}>
-                      {job.status.replace('_', ' ')}
-                    </span>
-                  </div>
-                  <div className="text-sm text-muted-foreground flex items-center">
-                    <MapPin className="w-3 h-3 mr-1" />
-                    {job.client.address}
-                  </div>
+              <div 
+                key={job.id} 
+                onClick={() => handleJobClick(job.id)}
+                className="p-3 rounded border border-border hover:shadow-md transition-all cursor-pointer bg-card"
+                data-testid={`job-tile-fullrun-${job.id}`}
+              >
+                <div className="flex justify-between items-start mb-1">
+                  <h5 className="font-semibold">{job.client.name}</h5>
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    job.status === 'completed' ? 'bg-green-100 dark:bg-green-900 text-green-900 dark:text-green-100' :
+                    job.status === 'cancelled' ? 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400' :
+                    job.status === 'in_progress' ? 'bg-amber-100 dark:bg-amber-900 text-amber-900 dark:text-amber-100' :
+                    'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
+                  }`}>
+                    {job.status.replace('_', ' ')}
+                  </span>
                 </div>
-              </Link>
+                <div className="text-sm text-muted-foreground flex items-center">
+                  <MapPin className="w-3 h-3 mr-1" />
+                  {job.client.address}
+                </div>
+              </div>
             ))}
           </div>
         )}
@@ -394,7 +476,7 @@ export default function Jobs() {
           return (
             <div
               key={day.toISOString()}
-              className={`min-h-32 p-2 rounded-lg border flex flex-col ${
+              className={`min-h-24 p-2 rounded-lg border flex flex-col ${
                 isToday(day) 
                   ? "bg-primary/5 border-primary" 
                   : day.getMonth() === currentDate.getMonth()
@@ -414,20 +496,24 @@ export default function Jobs() {
                   <Plus className="w-3 h-3" />
                 </Button>
               </div>
-              <div className="space-y-1 flex-1 overflow-y-auto">
+              <div className="space-y-1 flex-1">
                 {dayJobRuns.length > 0 ? (
                   dayJobRuns.map((jr: JobRun) => renderJobRunCard(jr, true))
                 ) : dayJobs.length > 0 ? (
-                  dayJobs.slice(0, 1).map(job => (
-                    <Link key={job.id} href={`/jobs/${job.id}`}>
-                      <div className={`text-xs p-1 rounded truncate cursor-pointer hover:opacity-80 ${
+                  dayJobs.map(job => (
+                    <div 
+                      key={job.id} 
+                      onClick={() => handleJobClick(job.id)}
+                      className={`text-xs p-1 rounded truncate cursor-pointer hover:opacity-80 ${
                         job.status === 'completed' ? 'bg-green-100 dark:bg-green-900 text-green-900 dark:text-green-100' :
+                        job.status === 'cancelled' ? 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400' :
                         job.status === 'in_progress' ? 'bg-amber-100 dark:bg-amber-900 text-amber-900 dark:text-amber-100' :
                         'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
-                      }`}>
-                        {job.client.name}
-                      </div>
-                    </Link>
+                      }`}
+                      data-testid={`job-tile-${job.id}`}
+                    >
+                      {job.client.name}
+                    </div>
                   ))
                 ) : null}
               </div>
@@ -501,26 +587,32 @@ export default function Jobs() {
                         </div>
                       )}
                       {getJobsForJobRun(jr.id).map(job => (
-                        <Link key={job.id} href={`/jobs/${job.id}`}>
-                          <div className="text-xs p-1 rounded cursor-pointer hover:opacity-80 mb-1">
-                            {job.client.name}
-                          </div>
-                        </Link>
+                        <div 
+                          key={job.id} 
+                          onClick={() => handleJobClick(job.id)}
+                          className="text-xs p-1 rounded cursor-pointer hover:opacity-80 mb-1"
+                          data-testid={`job-tile-run-${job.id}`}
+                        >
+                          {job.client.name}
+                        </div>
                       ))}
                     </div>
                   ))
                 ) : (
                   dayJobs.map(job => (
-                    <Link key={job.id} href={`/jobs/${job.id}`}>
-                      <div className={`p-2 rounded text-xs cursor-pointer hover:shadow-md transition-all ${
+                    <div 
+                      key={job.id} 
+                      onClick={() => handleJobClick(job.id)}
+                      className={`p-2 rounded text-xs cursor-pointer hover:shadow-md transition-all ${
                         job.status === 'completed' ? 'bg-green-100 dark:bg-green-900' :
+                        job.status === 'cancelled' ? 'bg-gray-100 dark:bg-gray-800' :
                         job.status === 'in_progress' ? 'bg-amber-100 dark:bg-amber-900' :
                         'bg-blue-100 dark:bg-blue-900'
-                      }`}>
-                        <div className="font-semibold truncate">{job.client.name}</div>
-                        <div className="text-muted-foreground">{format(new Date(job.scheduledDate), "h:mm a")}</div>
-                      </div>
-                    </Link>
+                      }`}
+                      data-testid={`job-tile-week-${job.id}`}
+                    >
+                      <div className="font-semibold truncate">{job.client.name}</div>
+                    </div>
                   ))
                 )}
               </div>
@@ -575,35 +667,35 @@ export default function Jobs() {
             ) : (
               <div className="space-y-3">
                 {dayJobs.map(job => (
-                  <Link key={job.id} href={`/jobs/${job.id}`}>
-                    <div className="p-4 rounded-lg border border-border hover:shadow-md transition-all cursor-pointer">
-                      <div className="flex justify-between items-start mb-2">
-                        <h4 className="font-semibold text-lg">{job.client.name}</h4>
-                        <span className={`text-xs px-2 py-1 rounded-full ${
-                          job.status === 'completed' ? 'bg-green-100 dark:bg-green-900 text-green-900 dark:text-green-100' :
-                          job.status === 'in_progress' ? 'bg-amber-100 dark:bg-amber-900 text-amber-900 dark:text-amber-100' :
-                          'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
-                        }`}>
-                          {job.status.replace('_', ' ')}
-                        </span>
-                      </div>
-                      <div className="space-y-2 text-sm text-muted-foreground">
-                        <div className="flex items-center">
-                          <Clock className="w-4 h-4 mr-2" />
-                          {format(new Date(job.scheduledDate), "h:mm a")}
-                        </div>
-                        <div className="flex items-center">
-                          <MapPin className="w-4 h-4 mr-2" />
-                          {job.client.address}
-                        </div>
-                        {canViewMoney && (job.price ?? 0) > 0 && (
-                          <div className="flex items-center font-semibold text-green-600 dark:text-green-400">
-                            {formatCurrency(job.price ?? 0)}
-                          </div>
-                        )}
-                      </div>
+                  <div 
+                    key={job.id} 
+                    onClick={() => handleJobClick(job.id)}
+                    className="p-4 rounded-lg border border-border hover:shadow-md transition-all cursor-pointer"
+                    data-testid={`job-tile-daily-${job.id}`}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <h4 className="font-semibold text-lg">{job.client.name}</h4>
+                      <span className={`text-xs px-2 py-1 rounded-full ${
+                        job.status === 'completed' ? 'bg-green-100 dark:bg-green-900 text-green-900 dark:text-green-100' :
+                        job.status === 'cancelled' ? 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400' :
+                        job.status === 'in_progress' ? 'bg-amber-100 dark:bg-amber-900 text-amber-900 dark:text-amber-100' :
+                        'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
+                      }`}>
+                        {job.status.replace('_', ' ')}
+                      </span>
                     </div>
-                  </Link>
+                    <div className="space-y-2 text-sm text-muted-foreground">
+                      <div className="flex items-center">
+                        <MapPin className="w-4 h-4 mr-2" />
+                        {job.client.address}
+                      </div>
+                      {canViewMoney && (job.price ?? 0) > 0 && (
+                        <div className="flex items-center font-semibold text-green-600 dark:text-green-400">
+                          {formatCurrency(job.price ?? 0)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
@@ -1202,6 +1294,215 @@ export default function Jobs() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!selectedJob} onOpenChange={(open) => !open && setSelectedJobId(null)}>
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh]">
+          {selectedJob && (
+            <>
+              <DialogHeader className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <DialogTitle className="text-lg">
+                    {format(new Date(selectedJob.scheduledDate), "EEEE, do MMM, yy")}
+                  </DialogTitle>
+                  <div className="flex items-center gap-1">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="icon" variant="ghost" data-testid="button-job-menu">
+                          <MoreVertical className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleSkipJob(selectedJob.id)} data-testid="button-skip-job">
+                          <SkipForward className="w-4 h-4 mr-2" />
+                          Skip This Job
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem 
+                          onClick={() => setDeleteJobId(selectedJob.id)} 
+                          className="text-destructive"
+                          data-testid="button-delete-job"
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Delete Job & Future Jobs
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+                <div 
+                  onClick={() => openMapsApp(selectedJob.client.address)}
+                  className="flex items-center gap-1 text-sm text-muted-foreground cursor-pointer hover:text-primary transition-colors"
+                  data-testid="link-open-maps"
+                >
+                  <MapPin className="w-3 h-3" />
+                  <span className="underline">{selectedJob.client.address}</span>
+                  <ExternalLink className="w-3 h-3" />
+                </div>
+              </DialogHeader>
+              
+              <ScrollArea className="max-h-[70vh] pr-4">
+                <div className="space-y-4 mt-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <div className="text-xs text-muted-foreground">Client</div>
+                      <div className="font-medium">{selectedJob.client.name}</div>
+                    </div>
+                    
+                    {selectedJob.programTier && (
+                      <div className="space-y-1">
+                        <div className="text-xs text-muted-foreground">Program</div>
+                        <div className="font-medium">
+                          {getProgramProgress(selectedJob.clientId, selectedJob.programTier).completed} of {selectedJob.programTier} visits
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="space-y-1">
+                      <div className="text-xs text-muted-foreground">Schedule</div>
+                      <div className="font-medium">{getScheduleFrequency(selectedJob.programTier)}</div>
+                    </div>
+                    
+                    {selectedJob.estimatedDurationMinutes && (
+                      <div className="space-y-1">
+                        <div className="text-xs text-muted-foreground">Duration</div>
+                        <div className="font-medium">{selectedJob.estimatedDurationMinutes} mins</div>
+                      </div>
+                    )}
+                    
+                    {canViewMoney && (selectedJob.price ?? 0) > 0 && (
+                      <div className="space-y-1">
+                        <div className="text-xs text-muted-foreground">Price</div>
+                        <div className="font-medium text-green-600 dark:text-green-400">
+                          {formatCurrency(selectedJob.price ?? 0)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    {getMowerInfo(selectedJob.mowerId) && (
+                      <div className="space-y-1">
+                        <div className="text-xs text-muted-foreground">Mower</div>
+                        <div className="font-medium">{getMowerInfo(selectedJob.mowerId)?.name}</div>
+                      </div>
+                    )}
+                    
+                    {formatCutHeight(selectedJob.cutHeightUnit, selectedJob.cutHeightValue) && (
+                      <div className="space-y-1">
+                        <div className="text-xs text-muted-foreground">Cut Height</div>
+                        <div className="font-medium">{formatCutHeight(selectedJob.cutHeightUnit, selectedJob.cutHeightValue)}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {canViewGateCode && selectedJob.gateCode && (
+                    <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                      <div className="text-xs text-muted-foreground mb-1">Gate Code</div>
+                      <div className="font-mono font-bold">{selectedJob.gateCode}</div>
+                    </div>
+                  )}
+
+                  {selectedJob.siteInformation && (
+                    <div className="space-y-1">
+                      <div className="text-xs text-muted-foreground">Site Instructions</div>
+                      <div className="text-sm bg-muted p-3 rounded-lg">{selectedJob.siteInformation}</div>
+                    </div>
+                  )}
+
+                  <div className="border-t pt-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium text-sm flex items-center gap-2">
+                        <Timer className="w-4 h-4" />
+                        Timer
+                      </h4>
+                      <div className="text-sm text-muted-foreground">Coming soon</div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" disabled>
+                        <Play className="w-3 h-3 mr-1" />
+                        Start (Self)
+                      </Button>
+                      <Button size="sm" variant="outline" disabled>
+                        <Play className="w-3 h-3 mr-1" />
+                        Start (Crew)
+                      </Button>
+                      <Button size="sm" variant="outline" disabled>
+                        <Square className="w-3 h-3 mr-1" />
+                        Stop
+                      </Button>
+                    </div>
+                  </div>
+
+                  {selectedJob.notes && (
+                    <div className="space-y-1">
+                      <div className="text-xs text-muted-foreground">Notes</div>
+                      <div className="text-sm bg-muted p-3 rounded-lg">{selectedJob.notes}</div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <div className="text-xs text-muted-foreground">Staff Notes</div>
+                    <Textarea
+                      value={staffNotes}
+                      onChange={(e) => setStaffNotes(e.target.value)}
+                      placeholder="Add notes about this job..."
+                      className="resize-none"
+                      rows={2}
+                      data-testid="input-staff-notes"
+                    />
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      onClick={() => handleSaveStaffNotes(selectedJob.id)}
+                      disabled={updateJob.isPending}
+                      data-testid="button-save-notes"
+                    >
+                      Save Notes
+                    </Button>
+                  </div>
+                </div>
+              </ScrollArea>
+
+              <DialogFooter className="flex-col sm:flex-row gap-2">
+                <Button variant="outline" onClick={() => setSelectedJobId(null)}>
+                  Close
+                </Button>
+                <Button 
+                  onClick={() => handleCompleteJob(selectedJob.id)}
+                  disabled={selectedJob.status === "completed" || updateJob.isPending}
+                  className="bg-green-600 hover:bg-green-700"
+                  data-testid="button-complete-job"
+                >
+                  <Check className="w-4 h-4 mr-1" />
+                  {selectedJob.status === "completed" ? "Completed" : "Mark Complete"}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deleteJobId} onOpenChange={(open) => !open && setDeleteJobId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Job</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this job? This action cannot be undone. 
+              All related data including tasks and feedback will also be deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete">Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteJobConfirm}
+              className="bg-destructive hover:bg-destructive/90"
+              data-testid="button-confirm-delete"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Layout>
   );
 }
