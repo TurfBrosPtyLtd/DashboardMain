@@ -1033,7 +1033,6 @@ export default function Settings() {
                         <SelectValue placeholder="Any visit" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Any visit</SelectItem>
                         {[1, 2, 3, 4].map(v => (
                           <SelectItem key={v} value={String(v)}>Visit {v}</SelectItem>
                         ))}
