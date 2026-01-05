@@ -6,6 +6,7 @@ import { useStaff, useCurrentStaff } from "@/hooks/use-users";
 import { useJobRuns, useCreateJobRun, useUpdateJobRun, useDeleteJobRun } from "@/hooks/use-job-runs";
 import { useCrews, useCreateCrew, useUpdateCrew, useDeleteCrew, useAddCrewMember, useRemoveCrewMember, type CrewWithMembers } from "@/hooks/use-crews";
 import { useJobTimeEntries, useStartTimer, useStopTimer, useDeleteTimeEntry } from "@/hooks/use-time-entries";
+import { useJobTasks, useCreateJobTask, useToggleJobTask, useDeleteJobTask } from "@/hooks/use-job-tasks";
 import { useQuery } from "@tanstack/react-query";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, addDays, isSameDay, isToday } from "date-fns";
 import { MapPin, Clock, Plus, ChevronLeft, ChevronRight, Zap, Trash2, Pencil, Users, AlertCircle, Scissors, CalendarDays, MoreVertical, Check, SkipForward, ExternalLink, Navigation, Play, Square, Timer } from "lucide-react";
@@ -58,6 +59,7 @@ export default function Jobs() {
   const [deleteJobId, setDeleteJobId] = useState<number | null>(null);
   const [staffNotes, setStaffNotes] = useState<string>("");
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [popupTaskInput, setPopupTaskInput] = useState<string>("");
   
   const { data: jobs, isLoading } = useJobs();
   const { data: clients } = useClients();
@@ -83,6 +85,11 @@ export default function Jobs() {
   const stopTimer = useStopTimer();
   const deleteTimeEntry = useDeleteTimeEntry();
   const { staff: currentStaff } = useCurrentStaff();
+  
+  const { data: jobTasks, refetch: refetchJobTasks } = useJobTasks(selectedJobId);
+  const createJobTask = useCreateJobTask();
+  const toggleJobTask = useToggleJobTask();
+  const deleteJobTask = useDeleteJobTask();
   
   const myActiveTimeEntry = timeEntries?.find(e => !e.endTime && e.staffId === currentStaff?.id);
   const otherActiveEntries = timeEntries?.filter(e => !e.endTime && e.staffId !== currentStaff?.id) || [];
@@ -127,6 +134,27 @@ export default function Jobs() {
   const handleDeleteTimeEntry = async (entryId: number) => {
     if (!selectedJobId) return;
     await deleteTimeEntry.mutateAsync({ entryId, jobId: selectedJobId });
+  };
+
+  const handleAddPopupTask = async () => {
+    if (!popupTaskInput.trim() || !selectedJobId) return;
+    await createJobTask.mutateAsync({ jobId: selectedJobId, description: popupTaskInput.trim() });
+    setPopupTaskInput("");
+  };
+
+  const handleToggleTask = async (taskId: number, isCompleted: boolean) => {
+    if (!selectedJobId) return;
+    await toggleJobTask.mutateAsync({ 
+      taskId, 
+      jobId: selectedJobId, 
+      isCompleted,
+      completedById: isCompleted ? currentStaff?.id : null
+    });
+  };
+
+  const handleDeleteTask = async (taskId: number) => {
+    if (!selectedJobId) return;
+    await deleteJobTask.mutateAsync({ taskId, jobId: selectedJobId });
   };
 
   const getSelectedClient = (): Client | undefined => {
@@ -1556,6 +1584,90 @@ export default function Jobs() {
                             </div>
                           ))}
                         </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="border-t pt-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium text-sm flex items-center gap-2">
+                        <Check className="w-4 h-4" />
+                        Task Checklist
+                      </h4>
+                      {jobTasks && jobTasks.length > 0 && (
+                        <span className="text-xs text-muted-foreground">
+                          {jobTasks.filter(t => t.isCompleted).length}/{jobTasks.length} done
+                        </span>
+                      )}
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <Input 
+                        value={popupTaskInput}
+                        onChange={(e) => setPopupTaskInput(e.target.value)}
+                        placeholder="Add a task..."
+                        className="flex-1"
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddPopupTask())}
+                        data-testid="input-popup-task"
+                      />
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="icon" 
+                        onClick={handleAddPopupTask}
+                        disabled={createJobTask.isPending || !popupTaskInput.trim()}
+                        data-testid="button-add-popup-task"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    
+                    {jobTasks && jobTasks.length > 0 && (
+                      <div className="space-y-1">
+                        {jobTasks.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).map(task => (
+                          <div 
+                            key={task.id} 
+                            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
+                              task.isCompleted 
+                                ? "bg-green-50 dark:bg-green-950/30" 
+                                : "bg-muted"
+                            }`}
+                          >
+                            <Checkbox 
+                              checked={task.isCompleted ?? false}
+                              onCheckedChange={(checked) => handleToggleTask(task.id, !!checked)}
+                              disabled={toggleJobTask.isPending}
+                              data-testid={`checkbox-task-${task.id}`}
+                            />
+                            <span 
+                              className={`flex-1 ${task.isCompleted ? "line-through text-muted-foreground" : ""}`}
+                              data-testid={`text-task-${task.id}`}
+                            >
+                              {task.description}
+                            </span>
+                            {task.isCompleted && task.completedById && (
+                              <span className="text-xs text-muted-foreground">
+                                {staff?.find(s => s.id === task.completedById)?.name || ""}
+                              </span>
+                            )}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteTask(task.id)}
+                              disabled={deleteJobTask.isPending}
+                              data-testid={`button-delete-task-${task.id}`}
+                            >
+                              <Trash2 className="w-3 h-3 text-destructive" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {(!jobTasks || jobTasks.length === 0) && (
+                      <div className="text-sm text-muted-foreground text-center py-2">
+                        No tasks yet. Add one above.
                       </div>
                     )}
                   </div>
