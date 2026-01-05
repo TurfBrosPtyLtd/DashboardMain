@@ -7,7 +7,7 @@ import { useJobRuns, useCreateJobRun, useUpdateJobRun, useDeleteJobRun } from "@
 import { useCrews, useCreateCrew, useUpdateCrew, useDeleteCrew, useAddCrewMember, useRemoveCrewMember, type CrewWithMembers } from "@/hooks/use-crews";
 import { useQuery } from "@tanstack/react-query";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, addDays, isSameDay, isToday } from "date-fns";
-import { MapPin, Clock, Plus, ChevronLeft, ChevronRight, Zap, Trash2, Pencil, Users, AlertCircle, Scissors } from "lucide-react";
+import { MapPin, Clock, Plus, ChevronLeft, ChevronRight, Zap, Trash2, Pencil, Users, AlertCircle, Scissors, CalendarDays } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -270,8 +270,10 @@ export default function Jobs() {
 
   const getDaysToDisplay = () => {
     if (viewType === "monthly") {
-      const start = startOfMonth(currentDate);
-      const end = endOfMonth(currentDate);
+      const monthStart = startOfMonth(currentDate);
+      const monthEnd = endOfMonth(currentDate);
+      const start = startOfWeek(monthStart);
+      const end = endOfWeek(monthEnd);
       return eachDayOfInterval({ start, end });
     } else if (viewType === "weekly") {
       const start = startOfWeek(currentDate);
@@ -884,14 +886,25 @@ export default function Jobs() {
           {viewType === "daily" && "This Week"}
         </h2>
         
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => setCurrentDate(addDays(currentDate, viewType === "daily" ? 1 : viewType === "weekly" ? 7 : 30))}
-          data-testid="button-next-period"
-        >
-          <ChevronRight className="w-4 h-4" />
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentDate(new Date())}
+            data-testid="button-go-to-today"
+          >
+            <CalendarDays className="w-4 h-4 mr-1" />
+            Today
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setCurrentDate(addDays(currentDate, viewType === "daily" ? 1 : viewType === "weekly" ? 7 : 30))}
+            data-testid="button-next-period"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
       </div>
 
       {viewType === "monthly" && renderMonthlyView()}

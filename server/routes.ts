@@ -272,13 +272,16 @@ export async function registerRoutes(
       // Auto-schedule future jobs if a program tier is selected
       if (input.programTier && input.scheduledDate) {
         const annualServices = parseInt(input.programTier, 10);
-        const startDate = new Date(input.scheduledDate);
         
-        const { addWeeks, getMonth, format } = await import("date-fns");
+        const { addWeeks, getMonth, format, startOfDay } = await import("date-fns");
+        
+        // Normalize the start date to midnight to avoid timezone drift
+        const startDate = startOfDay(new Date(input.scheduledDate));
         
         // Generate all 26 fortnightly slots from start date
+        // addWeeks preserves the day of week when operating on a normalized date
         const fortnightlySlots: { date: Date; month: number }[] = [];
-        let slotDate = startDate;
+        let slotDate = new Date(startDate);
         for (let i = 0; i < 26; i++) {
           if (i > 0) slotDate = addWeeks(slotDate, 2);
           fortnightlySlots.push({ date: new Date(slotDate), month: getMonth(slotDate) });
