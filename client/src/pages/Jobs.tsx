@@ -183,15 +183,28 @@ export default function Jobs() {
     let takenAt: string | undefined;
     try {
       const tags = await ExifReader.load(file);
-      const dateTimeOriginal = tags['DateTimeOriginal']?.description;
-      if (dateTimeOriginal) {
+      // Try multiple EXIF date fields in order of preference
+      const dateFields = ['DateTimeOriginal', 'CreateDate', 'DateTime', 'DateTimeDigitized'];
+      let dateString: string | undefined;
+      
+      for (const field of dateFields) {
+        if (tags[field]?.description) {
+          dateString = tags[field].description;
+          break;
+        }
+      }
+      
+      if (dateString) {
         // EXIF format: "YYYY:MM:DD HH:MM:SS" -> convert to ISO
-        const [datePart, timePart] = dateTimeOriginal.split(' ');
-        const [year, month, day] = datePart.split(':');
-        takenAt = new Date(`${year}-${month}-${day}T${timePart}`).toISOString();
+        const [datePart, timePart] = dateString.split(' ');
+        if (datePart && timePart) {
+          const [year, month, day] = datePart.split(':');
+          takenAt = new Date(`${year}-${month}-${day}T${timePart}`).toISOString();
+        }
       }
     } catch (err) {
-      // No EXIF data available, will use current time
+      // No EXIF data available - will use upload time as fallback
+      console.log('No EXIF data found in image');
     }
     
     const response = await uploadFile(file);
