@@ -30,7 +30,7 @@ import {
   type JobInvoiceItem, type InsertJobInvoiceItem,
   jobTreatments
 } from "@shared/schema";
-import { eq, and, desc, gte, lt, isNull, isNotNull } from "drizzle-orm";
+import { eq, and, or, desc, gte, lt, isNull, isNotNull } from "drizzle-orm";
 
 export interface IStorage {
   // Staff
@@ -474,10 +474,14 @@ export class DatabaseStorage implements IStorage {
 
     const jobMonth = new Date(job.scheduledDate).getMonth() + 1;
 
+    // Get all schedules: month-specific treatments for this month, OR flexible treatments (any time)
     const schedules = await db.query.treatmentProgramSchedule.findMany({
       where: and(
         eq(treatmentProgramSchedule.treatmentProgramId, treatmentProgramId),
-        eq(treatmentProgramSchedule.month, jobMonth)
+        or(
+          eq(treatmentProgramSchedule.month, jobMonth),
+          eq(treatmentProgramSchedule.isFlexible, true)
+        )
       ),
       with: { treatmentType: true }
     });
@@ -489,7 +493,8 @@ export class DatabaseStorage implements IStorage {
       treatmentTypeId: s.treatmentTypeId,
       status: "pending",
       quantity: s.quantity || 1,
-      instructions: s.instructions
+      instructions: s.instructions,
+      treatmentProgramScheduleId: s.id
     }));
 
     return await this.createJobTreatments(newTreatments);

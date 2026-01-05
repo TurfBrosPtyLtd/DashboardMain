@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { STAFF_ROLES, MOWER_TYPES, type Staff, type Mower, type TreatmentType, type ProgramTemplate, type ProgramTemplateTreatment, type TreatmentProgram, type TreatmentProgramSchedule } from "@shared/schema";
@@ -93,51 +94,82 @@ function TreatmentProgramScheduleSection({
   };
 
   const schedules = program?.schedule || [];
-  const schedulesByMonth = schedules.reduce((acc, s) => {
-    if (!acc[s.month]) acc[s.month] = [];
-    acc[s.month].push(s);
+  
+  // Separate flexible treatments from month-based treatments
+  const flexibleSchedules = schedules.filter(s => s.isFlexible);
+  const monthlySchedules = schedules.filter(s => !s.isFlexible && s.month);
+  
+  const schedulesByMonth = monthlySchedules.reduce((acc, s) => {
+    const month = s.month!;
+    if (!acc[month]) acc[month] = [];
+    acc[month].push(s);
     return acc;
   }, {} as Record<number, typeof schedules>);
+
+  const renderScheduleItem = (item: typeof schedules[0]) => (
+    <div key={item.id} className="flex items-center justify-between gap-1 text-xs">
+      <div className="flex items-center gap-1 min-w-0">
+        <TreatmentIcon category={item.treatmentType?.category || null} />
+        <span className="truncate">{item.treatmentType?.name || "Unknown"}</span>
+        {item.visitNumber && (
+          <Badge variant="outline" className="text-[10px] px-1 py-0 h-4">V{item.visitNumber}</Badge>
+        )}
+      </div>
+      {isManager && (
+        <Button 
+          size="icon" 
+          variant="ghost" 
+          className="h-5 w-5"
+          onClick={() => handleDeleteScheduleItem(item.id)}
+          data-testid={`button-delete-schedule-${item.id}`}
+        >
+          <X className="w-3 h-3" />
+        </Button>
+      )}
+    </div>
+  );
 
   return (
     <div className="border-t border-border p-4">
       <div className="mb-3">
-        <h4 className="font-medium text-sm text-muted-foreground">Monthly Treatment Schedule</h4>
+        <h4 className="font-medium text-sm text-muted-foreground">Treatment Schedule</h4>
       </div>
       {schedules.length === 0 ? (
         <p className="text-sm text-muted-foreground text-center py-4">
           No treatments scheduled yet. Add treatments to define when they should occur.
         </p>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-          {Object.entries(schedulesByMonth)
-            .sort(([a], [b]) => Number(a) - Number(b))
-            .map(([month, items]) => (
-              <div key={month} className="p-2 rounded-md bg-muted/50">
-                <p className="text-xs font-semibold mb-1">{MONTH_NAMES[Number(month) - 1]}</p>
+        <div className="space-y-4">
+          {flexibleSchedules.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold mb-2 text-amber-600 dark:text-amber-400">Flexible (Any Time)</p>
+              <div className="p-2 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
                 <div className="space-y-1">
-                  {items.map(item => (
-                    <div key={item.id} className="flex items-center justify-between gap-1 text-xs">
-                      <div className="flex items-center gap-1 min-w-0">
-                        <TreatmentIcon category={item.treatmentType?.category || null} />
-                        <span className="truncate">{item.treatmentType?.name || "Unknown"}</span>
-                      </div>
-                      {isManager && (
-                        <Button 
-                          size="icon" 
-                          variant="ghost" 
-                          className="h-5 w-5"
-                          onClick={() => handleDeleteScheduleItem(item.id)}
-                          data-testid={`button-delete-schedule-${item.id}`}
-                        >
-                          <X className="w-3 h-3" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
+                  {flexibleSchedules.map(renderScheduleItem)}
                 </div>
               </div>
-            ))}
+            </div>
+          )}
+          
+          {Object.keys(schedulesByMonth).length > 0 && (
+            <div>
+              {flexibleSchedules.length > 0 && (
+                <p className="text-xs font-semibold mb-2 text-muted-foreground">Monthly Schedule</p>
+              )}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                {Object.entries(schedulesByMonth)
+                  .sort(([a], [b]) => Number(a) - Number(b))
+                  .map(([month, items]) => (
+                    <div key={month} className="p-2 rounded-md bg-muted/50">
+                      <p className="text-xs font-semibold mb-1">{MONTH_NAMES[Number(month) - 1]}</p>
+                      <div className="space-y-1">
+                        {items.map(renderScheduleItem)}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -173,6 +205,8 @@ export default function Settings() {
   const [scheduleFormTreatmentTypeId, setScheduleFormTreatmentTypeId] = useState<string>("");
   const [scheduleFormMonth, setScheduleFormMonth] = useState<string>("");
   const [scheduleFormInstructions, setScheduleFormInstructions] = useState<string>("");
+  const [scheduleFormIsFlexible, setScheduleFormIsFlexible] = useState(false);
+  const [scheduleFormVisitNumber, setScheduleFormVisitNumber] = useState<string>("");
   
   const currentYear = new Date().getFullYear();
   const [programYear, setProgramYear] = useState(currentYear);
@@ -342,14 +376,20 @@ export default function Settings() {
   const handleAddScheduleItem = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedTreatmentProgramForSchedule) return;
-    if (!scheduleFormTreatmentTypeId || !scheduleFormMonth) {
-      toast({ title: "Please select treatment type and month", variant: "destructive" });
+    if (!scheduleFormTreatmentTypeId) {
+      toast({ title: "Please select a treatment type", variant: "destructive" });
+      return;
+    }
+    if (!scheduleFormIsFlexible && !scheduleFormMonth) {
+      toast({ title: "Please select a month or mark as flexible", variant: "destructive" });
       return;
     }
     const data = {
       treatmentTypeId: Number(scheduleFormTreatmentTypeId),
-      month: Number(scheduleFormMonth),
+      month: scheduleFormIsFlexible ? null : Number(scheduleFormMonth),
       instructions: scheduleFormInstructions || null,
+      isFlexible: scheduleFormIsFlexible,
+      visitNumber: scheduleFormVisitNumber ? Number(scheduleFormVisitNumber) : null,
     };
     try {
       await apiRequest("POST", `/api/treatment-programs/${selectedTreatmentProgramForSchedule}/schedule`, data);
@@ -360,6 +400,8 @@ export default function Settings() {
       setScheduleFormTreatmentTypeId("");
       setScheduleFormMonth("");
       setScheduleFormInstructions("");
+      setScheduleFormIsFlexible(false);
+      setScheduleFormVisitNumber("");
     } catch (error) {
       toast({ title: "Failed to add treatment to schedule", variant: "destructive" });
     }
@@ -951,19 +993,55 @@ export default function Settings() {
                       </SelectContent>
                     </Select>
                   </div>
+                  
+                  <div className="flex items-center justify-between gap-2 p-3 rounded-md bg-muted/50">
+                    <div>
+                      <Label htmlFor="schedule-flexible">Flexible (Any Time)</Label>
+                      <p className="text-xs text-muted-foreground">Treatment can be done at any visit during the season</p>
+                    </div>
+                    <Switch
+                      id="schedule-flexible"
+                      checked={scheduleFormIsFlexible}
+                      onCheckedChange={(checked) => {
+                        setScheduleFormIsFlexible(checked);
+                        if (checked) setScheduleFormMonth("");
+                      }}
+                      data-testid="switch-schedule-flexible"
+                    />
+                  </div>
+                  
+                  {!scheduleFormIsFlexible && (
+                    <div className="space-y-2">
+                      <Label htmlFor="schedule-month">Month</Label>
+                      <Select value={scheduleFormMonth} onValueChange={setScheduleFormMonth}>
+                        <SelectTrigger data-testid="select-schedule-month">
+                          <SelectValue placeholder="Select month" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {MONTH_NAMES.map((m, idx) => (
+                            <SelectItem key={idx + 1} value={String(idx + 1)}>{m}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  
                   <div className="space-y-2">
-                    <Label htmlFor="schedule-month">Month</Label>
-                    <Select value={scheduleFormMonth} onValueChange={setScheduleFormMonth}>
-                      <SelectTrigger data-testid="select-schedule-month">
-                        <SelectValue placeholder="Select month" />
+                    <Label htmlFor="schedule-visit-number">Visit Number (optional)</Label>
+                    <Select value={scheduleFormVisitNumber} onValueChange={setScheduleFormVisitNumber}>
+                      <SelectTrigger data-testid="select-schedule-visit-number">
+                        <SelectValue placeholder="Any visit" />
                       </SelectTrigger>
                       <SelectContent>
-                        {MONTH_NAMES.map((m, idx) => (
-                          <SelectItem key={idx + 1} value={String(idx + 1)}>{m}</SelectItem>
+                        <SelectItem value="">Any visit</SelectItem>
+                        {[1, 2, 3, 4].map(v => (
+                          <SelectItem key={v} value={String(v)}>Visit {v}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    <p className="text-xs text-muted-foreground">Group treatments by visit number for efficient scheduling</p>
                   </div>
+                  
                   <div className="space-y-2">
                     <Label htmlFor="schedule-instructions">Instructions (optional)</Label>
                     <Textarea 

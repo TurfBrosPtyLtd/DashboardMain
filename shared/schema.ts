@@ -196,7 +196,9 @@ export const treatmentProgramSchedule = pgTable("treatment_program_schedule", {
   id: serial("id").primaryKey(),
   treatmentProgramId: integer("treatment_program_id").references(() => treatmentPrograms.id).notNull(),
   treatmentTypeId: integer("treatment_type_id").references(() => treatmentTypes.id).notNull(),
-  month: integer("month").notNull(), // 1-12
+  month: integer("month"), // 1-12, nullable for flexible treatments
+  isFlexible: boolean("is_flexible").default(false), // True for anytime treatments (aeration, soil tests)
+  visitNumber: integer("visit_number"), // Which visit within the month (1, 2, etc.) for grouping treatments
   quantity: integer("quantity").default(1),
   instructions: text("instructions"),
 });
@@ -270,6 +272,7 @@ export const jobTreatments = pgTable("job_treatments", {
   jobId: integer("job_id").references(() => jobs.id).notNull(),
   treatmentTypeId: integer("treatment_type_id").references(() => treatmentTypes.id).notNull(),
   programTemplateTreatmentId: integer("program_template_treatment_id").references(() => programTemplateTreatments.id),
+  treatmentProgramScheduleId: integer("treatment_program_schedule_id").references(() => treatmentProgramSchedule.id), // Link to treatment program schedule entry
   status: text("status").default("pending").notNull(), // 'pending', 'completed', 'skipped'
   quantity: integer("quantity").default(1),
   instructions: text("instructions"),
@@ -459,6 +462,10 @@ export const jobTreatmentsRelations = relations(jobTreatments, ({ one }) => ({
   templateTreatment: one(programTemplateTreatments, {
     fields: [jobTreatments.programTemplateTreatmentId],
     references: [programTemplateTreatments.id],
+  }),
+  treatmentProgramScheduleEntry: one(treatmentProgramSchedule, {
+    fields: [jobTreatments.treatmentProgramScheduleId],
+    references: [treatmentProgramSchedule.id],
   }),
   completedBy: one(staff, {
     fields: [jobTreatments.completedById],
