@@ -11,6 +11,7 @@ import {
 import { z } from "zod";
 import OpenAI from "openai";
 import { generateServiceWeeks, applySkipLogic } from "@shared/serviceDistribution";
+import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 
 // Helper to get current user's staff role and ID
 async function getCurrentUserRole(req: Request): Promise<string | null> {
@@ -49,6 +50,9 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  
+  // Register object storage routes for file uploads
+  registerObjectStorageRoutes(app);
   
   // Staff
   app.get(api.staff.list.path, async (req, res) => {

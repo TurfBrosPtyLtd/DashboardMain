@@ -7,6 +7,9 @@ import { useJobRuns, useCreateJobRun, useUpdateJobRun, useDeleteJobRun } from "@
 import { useCrews, useCreateCrew, useUpdateCrew, useDeleteCrew, useAddCrewMember, useRemoveCrewMember, type CrewWithMembers } from "@/hooks/use-crews";
 import { useJobTimeEntries, useStartTimer, useStopTimer, useDeleteTimeEntry } from "@/hooks/use-time-entries";
 import { useJobTasks, useCreateJobTask, useToggleJobTask, useDeleteJobTask } from "@/hooks/use-job-tasks";
+import { useJobPhotos, useCreateJobPhoto, useDeleteJobPhoto } from "@/hooks/use-job-photos";
+import { useUpload } from "@/hooks/use-upload";
+import { Camera } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, startOfWeek, endOfWeek, addDays, isSameDay, isToday } from "date-fns";
 import { MapPin, Clock, Plus, ChevronLeft, ChevronRight, Zap, Trash2, Pencil, Users, AlertCircle, Scissors, CalendarDays, MoreVertical, Check, SkipForward, ExternalLink, Navigation, Play, Square, Timer } from "lucide-react";
@@ -60,6 +63,7 @@ export default function Jobs() {
   const [staffNotes, setStaffNotes] = useState<string>("");
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [popupTaskInput, setPopupTaskInput] = useState<string>("");
+  const [photoType, setPhotoType] = useState<"before" | "during" | "after">("during");
   
   const { data: jobs, isLoading } = useJobs();
   const { data: clients } = useClients();
@@ -90,6 +94,11 @@ export default function Jobs() {
   const createJobTask = useCreateJobTask();
   const toggleJobTask = useToggleJobTask();
   const deleteJobTask = useDeleteJobTask();
+  
+  const { data: jobPhotos } = useJobPhotos(selectedJobId);
+  const createJobPhoto = useCreateJobPhoto();
+  const deleteJobPhoto = useDeleteJobPhoto();
+  const { uploadFile, isUploading } = useUpload();
   
   const myActiveTimeEntry = timeEntries?.find(e => !e.endTime && e.staffId === currentStaff?.id);
   const otherActiveEntries = timeEntries?.filter(e => !e.endTime && e.staffId !== currentStaff?.id) || [];
@@ -154,6 +163,37 @@ export default function Jobs() {
   const handleDeleteTask = async (taskId: number) => {
     if (!selectedJobId) return;
     await deleteJobTask.mutateAsync({ taskId, jobId: selectedJobId });
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!selectedJobId || !e.target.files?.[0]) return;
+    const file = e.target.files[0];
+    
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      return;
+    }
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      return;
+    }
+    
+    const response = await uploadFile(file);
+    if (response) {
+      // The objectPath is already in format /objects/... which is served by our routes
+      await createJobPhoto.mutateAsync({
+        jobId: selectedJobId,
+        url: response.objectPath,
+        photoType,
+        caption: file.name
+      });
+    }
+    e.target.value = "";
+  };
+
+  const handleDeletePhoto = async (photoId: number) => {
+    if (!selectedJobId) return;
+    await deleteJobPhoto.mutateAsync({ photoId, jobId: selectedJobId });
   };
 
   const getSelectedClient = (): Client | undefined => {
@@ -1670,6 +1710,103 @@ export default function Jobs() {
                     {(!jobTasks || jobTasks.length === 0) && (
                       <div className="text-sm text-muted-foreground text-center py-2">
                         No tasks yet. Add one above.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="border-t pt-4 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="font-medium text-sm flex items-center gap-2">
+                        <Camera className="w-4 h-4" />
+                        Photos
+                      </h4>
+                      {jobPhotos && jobPhotos.length > 0 && (
+                        <span className="text-xs text-muted-foreground">
+                          {jobPhotos.length} photo{jobPhotos.length !== 1 ? "s" : ""}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Upload photos of the job before, during, or after completion.
+                    </p>
+                    
+                    <div className="flex gap-2 items-center">
+                      <Select value={photoType} onValueChange={(v) => setPhotoType(v as "before" | "during" | "after")}>
+                        <SelectTrigger className="w-32" data-testid="select-photo-type">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="before">Before</SelectItem>
+                          <SelectItem value="during">During</SelectItem>
+                          <SelectItem value="after">After</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <label>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handlePhotoUpload}
+                          disabled={isUploading || createJobPhoto.isPending}
+                          className="hidden"
+                          data-testid="input-photo-upload"
+                        />
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          size="sm" 
+                          disabled={isUploading || createJobPhoto.isPending}
+                          asChild
+                        >
+                          <span>
+                            <Camera className="w-4 h-4 mr-1" />
+                            {isUploading ? "Uploading..." : "Add Photo"}
+                          </span>
+                        </Button>
+                      </label>
+                    </div>
+
+                    {jobPhotos && jobPhotos.length > 0 && (
+                      <div className="grid grid-cols-3 gap-2">
+                        {jobPhotos.map((photo) => (
+                          <div 
+                            key={photo.id} 
+                            className="relative group rounded-lg overflow-hidden bg-muted aspect-square"
+                            data-testid={`photo-${photo.id}`}
+                          >
+                            <img 
+                              src={photo.url} 
+                              alt={`Job photo - ${photo.photoType}`}
+                              className="w-full h-full object-cover"
+                            />
+                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2">
+                              <div className="flex justify-between items-start">
+                                <Badge variant="secondary" className="text-xs capitalize">
+                                  {photo.photoType}
+                                </Badge>
+                                <Button
+                                  type="button"
+                                  variant="destructive"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={() => handleDeletePhoto(photo.id)}
+                                  disabled={deleteJobPhoto.isPending}
+                                  data-testid={`button-delete-photo-${photo.id}`}
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </div>
+                              <div className="text-xs text-white/80">
+                                {photo.createdAt && format(new Date(photo.createdAt), "MMM d, h:mm a")}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {(!jobPhotos || jobPhotos.length === 0) && (
+                      <div className="text-sm text-muted-foreground text-center py-2">
+                        No photos yet. Upload one above.
                       </div>
                     )}
                   </div>
