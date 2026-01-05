@@ -147,8 +147,7 @@ export default function Jobs() {
     await toggleJobTask.mutateAsync({ 
       taskId, 
       jobId: selectedJobId, 
-      isCompleted,
-      completedById: isCompleted ? currentStaff?.id : null
+      isCompleted
     });
   };
 

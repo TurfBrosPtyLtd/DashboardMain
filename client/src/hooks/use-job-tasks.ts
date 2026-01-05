@@ -44,20 +44,14 @@ export function useToggleJobTask() {
     mutationFn: async ({ 
       taskId, 
       jobId, 
-      isCompleted,
-      completedById
+      isCompleted
     }: { 
       taskId: number; 
       jobId: number; 
       isCompleted: boolean;
-      completedById?: number | null;
     }) => {
-      const updates: Partial<JobTask> = { 
-        isCompleted,
-        completedById: isCompleted ? completedById : null,
-        completedAt: isCompleted ? new Date() : null
-      };
-      const res = await apiRequest("PUT", `/api/tasks/${taskId}`, updates);
+      // Let backend handle completedById and completedAt
+      const res = await apiRequest("PUT", `/api/tasks/${taskId}`, { isCompleted });
       return res.json();
     },
     onSuccess: (_, variables) => {

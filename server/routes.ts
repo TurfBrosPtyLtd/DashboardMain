@@ -606,16 +606,32 @@ export async function registerRoutes(
   app.put("/api/tasks/:id", async (req, res) => {
     try {
       const taskId = Number(req.params.id);
-      const staffId = await getCurrentStaffId(req);
-      const updates = { ...req.body };
-      if (req.body.isCompleted && !req.body.completedById) {
-        updates.completedById = staffId;
-        updates.completedAt = new Date();
+      const updates: Record<string, unknown> = {};
+      
+      if (typeof req.body.isCompleted === "boolean") {
+        updates.isCompleted = req.body.isCompleted;
+        if (req.body.isCompleted) {
+          // Set completed info
+          const staffId = await getCurrentStaffId(req);
+          updates.completedById = staffId;
+          updates.completedAt = new Date();
+        } else {
+          // Clear completed info
+          updates.completedById = null;
+          updates.completedAt = null;
+        }
       }
+      
+      // Handle description update if provided
+      if (typeof req.body.description === "string") {
+        updates.description = req.body.description;
+      }
+      
       const task = await storage.updateJobTask(taskId, updates);
       if (!task) return res.status(404).json({ message: "Task not found" });
       res.json(task);
     } catch (err) {
+      console.error("Error updating task:", err);
       res.status(400).json({ message: "Invalid input" });
     }
   });
