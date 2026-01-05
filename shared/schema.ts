@@ -244,6 +244,20 @@ export const clientProgramTreatments = pgTable("client_program_treatments", {
   notes: text("notes"),
 });
 
+// Job treatments - treatments directly linked to jobs (when program is on job, not client)
+export const jobTreatments = pgTable("job_treatments", {
+  id: serial("id").primaryKey(),
+  jobId: integer("job_id").references(() => jobs.id).notNull(),
+  treatmentTypeId: integer("treatment_type_id").references(() => treatmentTypes.id).notNull(),
+  programTemplateTreatmentId: integer("program_template_treatment_id").references(() => programTemplateTreatments.id),
+  status: text("status").default("pending").notNull(), // 'pending', 'completed', 'skipped'
+  quantity: integer("quantity").default(1),
+  instructions: text("instructions"),
+  completedById: integer("completed_by_id").references(() => staff.id),
+  completedAt: timestamp("completed_at"),
+  notes: text("notes"),
+});
+
 // Job time entries - timer system for tracking work hours
 export const jobTimeEntries = pgTable("job_time_entries", {
   id: serial("id").primaryKey(),
@@ -340,6 +354,7 @@ export const jobsRelations = relations(jobs, ({ one, many }) => ({
   feedback: many(feedback),
   applications: many(applications),
   tasks: many(jobTasks),
+  treatments: many(jobTreatments),
 }));
 
 export const feedbackRelations = relations(feedback, ({ one }) => ({
@@ -393,6 +408,26 @@ export const jobTasksRelations = relations(jobTasks, ({ one }) => ({
 export const treatmentTypesRelations = relations(treatmentTypes, ({ many }) => ({
   templateTreatments: many(programTemplateTreatments),
   clientTreatments: many(clientProgramTreatments),
+  jobTreatments: many(jobTreatments),
+}));
+
+export const jobTreatmentsRelations = relations(jobTreatments, ({ one }) => ({
+  job: one(jobs, {
+    fields: [jobTreatments.jobId],
+    references: [jobs.id],
+  }),
+  treatmentType: one(treatmentTypes, {
+    fields: [jobTreatments.treatmentTypeId],
+    references: [treatmentTypes.id],
+  }),
+  templateTreatment: one(programTemplateTreatments, {
+    fields: [jobTreatments.programTemplateTreatmentId],
+    references: [programTemplateTreatments.id],
+  }),
+  completedBy: one(staff, {
+    fields: [jobTreatments.completedById],
+    references: [staff.id],
+  }),
 }));
 
 export const programTemplatesRelations = relations(programTemplates, ({ many }) => ({
@@ -514,6 +549,7 @@ export const insertProgramTemplateTreatmentSchema = createInsertSchema(programTe
 export const insertClientProgramSchema = createInsertSchema(clientPrograms).omit({ id: true, createdAt: true });
 export const insertClientProgramServiceSchema = createInsertSchema(clientProgramServices).omit({ id: true });
 export const insertClientProgramTreatmentSchema = createInsertSchema(clientProgramTreatments).omit({ id: true });
+export const insertJobTreatmentSchema = createInsertSchema(jobTreatments).omit({ id: true, completedAt: true });
 export const insertJobTimeEntrySchema = createInsertSchema(jobTimeEntries).omit({ id: true, createdAt: true, durationMinutes: true }).extend({
   startTime: z.union([z.date(), z.string().pipe(z.coerce.date())]),
   endTime: z.union([z.date(), z.string().pipe(z.coerce.date())]).optional().nullable(),
@@ -558,6 +594,8 @@ export type ClientProgramService = typeof clientProgramServices.$inferSelect;
 export type InsertClientProgramService = z.infer<typeof insertClientProgramServiceSchema>;
 export type ClientProgramTreatment = typeof clientProgramTreatments.$inferSelect;
 export type InsertClientProgramTreatment = z.infer<typeof insertClientProgramTreatmentSchema>;
+export type JobTreatment = typeof jobTreatments.$inferSelect;
+export type InsertJobTreatment = z.infer<typeof insertJobTreatmentSchema>;
 export type JobTimeEntry = typeof jobTimeEntries.$inferSelect;
 export type InsertJobTimeEntry = z.infer<typeof insertJobTimeEntrySchema>;
 export type JobPhoto = typeof jobPhotos.$inferSelect;

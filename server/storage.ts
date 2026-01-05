@@ -21,9 +21,11 @@ import {
   type ClientProgram, type InsertClientProgram,
   type ClientProgramService, type InsertClientProgramService,
   type ClientProgramTreatment, type InsertClientProgramTreatment,
+  type JobTreatment, type InsertJobTreatment,
   type JobTimeEntry, type InsertJobTimeEntry,
   type JobPhoto, type InsertJobPhoto,
-  type JobInvoiceItem, type InsertJobInvoiceItem
+  type JobInvoiceItem, type InsertJobInvoiceItem,
+  jobTreatments
 } from "@shared/schema";
 import { eq, and, desc, gte, lt, isNull } from "drizzle-orm";
 
@@ -117,6 +119,13 @@ export interface IStorage {
   updateClientProgramTreatment(id: number, updates: Partial<ClientProgramTreatment>): Promise<ClientProgramTreatment | undefined>;
   createClientProgramTreatment(treatment: InsertClientProgramTreatment): Promise<ClientProgramTreatment>;
   createClientProgramTreatments(treatments: InsertClientProgramTreatment[]): Promise<ClientProgramTreatment[]>;
+
+  // Job Treatments (direct job-based treatments)
+  getJobTreatments(jobId: number): Promise<(JobTreatment & { treatmentType: TreatmentType })[]>;
+  createJobTreatments(treatments: InsertJobTreatment[]): Promise<JobTreatment[]>;
+  updateJobTreatment(id: number, updates: Partial<JobTreatment>): Promise<JobTreatment | undefined>;
+  seedJobTreatmentsFromTemplate(jobId: number, programTemplateId: number): Promise<JobTreatment[]>;
+  clearJobTreatments(jobId: number): Promise<boolean>;
 
   // Job Time Entries
   getJobTimeEntries(jobId: number): Promise<(JobTimeEntry & { staff: Staff })[]>;
@@ -512,6 +521,62 @@ export class DatabaseStorage implements IStorage {
   async createClientProgramTreatments(treatments: InsertClientProgramTreatment[]): Promise<ClientProgramTreatment[]> {
     if (treatments.length === 0) return [];
     return await db.insert(clientProgramTreatments).values(treatments).returning();
+  }
+
+  // Job Treatments (direct job-based treatments)
+  async getJobTreatments(jobId: number): Promise<(JobTreatment & { treatmentType: TreatmentType })[]> {
+    return await db.query.jobTreatments.findMany({
+      where: eq(jobTreatments.jobId, jobId),
+      with: { treatmentType: true }
+    });
+  }
+
+  async createJobTreatments(treatments: InsertJobTreatment[]): Promise<JobTreatment[]> {
+    if (treatments.length === 0) return [];
+    return await db.insert(jobTreatments).values(treatments).returning();
+  }
+
+  async updateJobTreatment(id: number, updates: Partial<JobTreatment>): Promise<JobTreatment | undefined> {
+    const [updated] = await db.update(jobTreatments).set(updates).where(eq(jobTreatments.id, id)).returning();
+    return updated;
+  }
+
+  async seedJobTreatmentsFromTemplate(jobId: number, programTemplateId: number): Promise<JobTreatment[]> {
+    // Get the job to determine the month
+    const job = await db.query.jobs.findFirst({
+      where: eq(jobs.id, jobId)
+    });
+    if (!job) return [];
+
+    const jobMonth = new Date(job.scheduledDate).getMonth() + 1;
+
+    // Get template treatments for this month
+    const templateTreatments = await db.query.programTemplateTreatments.findMany({
+      where: and(
+        eq(programTemplateTreatments.programTemplateId, programTemplateId),
+        eq(programTemplateTreatments.month, jobMonth)
+      ),
+      with: { treatmentType: true }
+    });
+
+    if (templateTreatments.length === 0) return [];
+
+    // Create job treatments from template
+    const newTreatments: InsertJobTreatment[] = templateTreatments.map(t => ({
+      jobId,
+      treatmentTypeId: t.treatmentTypeId,
+      programTemplateTreatmentId: t.id,
+      status: "pending",
+      quantity: t.quantity || 1,
+      instructions: t.instructions
+    }));
+
+    return await this.createJobTreatments(newTreatments);
+  }
+
+  async clearJobTreatments(jobId: number): Promise<boolean> {
+    await db.delete(jobTreatments).where(eq(jobTreatments.jobId, jobId));
+    return true;
   }
 
   // Job Time Entries

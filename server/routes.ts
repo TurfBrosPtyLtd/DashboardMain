@@ -273,6 +273,11 @@ export async function registerRoutes(
         }
       }
       
+      // Seed job treatments from program template if one is assigned
+      if (input.programTemplateId) {
+        await storage.seedJobTreatmentsFromTemplate(job.id, input.programTemplateId);
+      }
+      
       // Auto-schedule future jobs if a program tier is selected
       if (input.programTier && input.scheduledDate) {
         const annualServices = parseInt(input.programTier, 10);
@@ -378,6 +383,7 @@ export async function registerRoutes(
 
   app.put(api.jobs.update.path, async (req, res) => {
     try {
+      const jobId = Number(req.params.id);
       const role = await getCurrentUserRole(req);
       const canViewPrice = canViewMoney(role);
       const canViewGate = canViewGateCode(role);
@@ -390,7 +396,22 @@ export async function registerRoutes(
       if (!canViewGate) {
         delete input.gateCode;
       }
-      const job = await storage.updateJob(Number(req.params.id), input);
+      
+      // Check if programTemplateId is being changed to reseed treatments
+      const existingJob = await storage.getJob(jobId);
+      const templateChanged = existingJob && input.programTemplateId !== undefined && 
+        input.programTemplateId !== existingJob.programTemplateId;
+      
+      const job = await storage.updateJob(jobId, input);
+      
+      // Reseed treatments if program template changed
+      if (templateChanged) {
+        await storage.clearJobTreatments(jobId);
+        if (input.programTemplateId) {
+          await storage.seedJobTreatmentsFromTemplate(jobId, input.programTemplateId);
+        }
+      }
+      
       res.json(sanitizeJobData(job, canViewPrice, canViewGate));
     } catch (err) {
       res.status(400).json({ message: "Invalid input" });
@@ -829,14 +850,32 @@ export async function registerRoutes(
     }
   });
 
-  // Job Treatments - get treatments due for a job based on client program and month
+  // Job Treatments - get treatments directly linked to a job
   app.get("/api/jobs/:id/treatments", async (req, res) => {
     try {
       const jobId = Number(req.params.id);
-      const treatments = await storage.getTreatmentsForJob(jobId);
+      const treatments = await storage.getJobTreatments(jobId);
       res.json(treatments);
     } catch (err) {
       res.status(400).json({ message: "Invalid job ID" });
+    }
+  });
+
+  // Update job treatment status
+  app.put("/api/job-treatments/:id", async (req, res) => {
+    try {
+      const treatmentId = Number(req.params.id);
+      const staffId = await getCurrentStaffId(req);
+      const updates = { ...req.body };
+      if (req.body.status === "completed" && !req.body.completedById) {
+        updates.completedById = staffId;
+        updates.completedAt = new Date();
+      }
+      const treatment = await storage.updateJobTreatment(treatmentId, updates);
+      if (!treatment) return res.status(404).json({ message: "Treatment not found" });
+      res.json(treatment);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
     }
   });
 
