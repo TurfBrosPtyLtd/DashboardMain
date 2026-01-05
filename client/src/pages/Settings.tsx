@@ -13,12 +13,16 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { STAFF_ROLES, MOWER_TYPES, type Staff, type Mower, type TreatmentType, type ProgramTemplate, type ProgramTemplateTreatment } from "@shared/schema";
+import { STAFF_ROLES, MOWER_TYPES, type Staff, type Mower, type TreatmentType, type ProgramTemplate, type ProgramTemplateTreatment, type TreatmentProgram, type TreatmentProgramSchedule } from "@shared/schema";
 import { getServicesArray } from "@shared/serviceDistribution";
 import { Users, Shield, Save, Plus, Pencil, Leaf, Calendar, Tractor, Droplet, Bug, FlaskConical, CircleDot, Droplets, Calculator, RefreshCw, ChevronDown, ChevronUp, X } from "lucide-react";
 
 type ProgramWithTreatments = ProgramTemplate & { 
   treatments: (ProgramTemplateTreatment & { treatmentType: TreatmentType })[] 
+};
+
+type TreatmentProgramWithSchedule = TreatmentProgram & {
+  schedule: (TreatmentProgramSchedule & { treatmentType: TreatmentType })[];
 };
 
 function MowerIcon({ type }: { type: string }) {
@@ -62,6 +66,92 @@ function parseServicesPerMonth(value: string | number[] | null | undefined): num
   return Array(12).fill(2);
 }
 
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+function TreatmentProgramScheduleSection({ 
+  programId, 
+  treatmentTypes, 
+  isManager,
+  onAddSchedule 
+}: { 
+  programId: number; 
+  treatmentTypes: TreatmentType[]; 
+  isManager: boolean;
+  onAddSchedule: () => void;
+}) {
+  const { data: program } = useQuery<TreatmentProgramWithSchedule>({ 
+    queryKey: ["/api/treatment-programs", programId] 
+  });
+  const { toast } = useToast();
+
+  const handleDeleteScheduleItem = async (scheduleId: number) => {
+    try {
+      await apiRequest("DELETE", `/api/treatment-program-schedule/${scheduleId}`);
+      toast({ title: "Treatment removed from schedule" });
+      queryClient.invalidateQueries({ queryKey: ["/api/treatment-programs", programId] });
+    } catch (error) {
+      toast({ title: "Failed to remove treatment", variant: "destructive" });
+    }
+  };
+
+  const schedules = program?.schedule || [];
+  const schedulesByMonth = schedules.reduce((acc, s) => {
+    if (!acc[s.month]) acc[s.month] = [];
+    acc[s.month].push(s);
+    return acc;
+  }, {} as Record<number, typeof schedules>);
+
+  return (
+    <div className="border-t border-border p-4">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <h4 className="font-medium text-sm text-muted-foreground">Monthly Treatment Schedule</h4>
+        {isManager && (
+          <Button size="sm" variant="outline" onClick={onAddSchedule} data-testid={`button-add-schedule-${programId}`}>
+            <Plus className="w-3 h-3 mr-1" />
+            Add Treatment
+          </Button>
+        )}
+      </div>
+      {schedules.length === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-4">
+          No treatments scheduled yet. Add treatments to define when they should occur.
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+          {Object.entries(schedulesByMonth)
+            .sort(([a], [b]) => Number(a) - Number(b))
+            .map(([month, items]) => (
+              <div key={month} className="p-2 rounded-md bg-muted/50">
+                <p className="text-xs font-semibold mb-1">{MONTH_NAMES[Number(month) - 1]}</p>
+                <div className="space-y-1">
+                  {items.map(item => (
+                    <div key={item.id} className="flex items-center justify-between gap-1 text-xs">
+                      <div className="flex items-center gap-1 min-w-0">
+                        <TreatmentIcon category={item.treatmentType?.category || null} />
+                        <span className="truncate">{item.treatmentType?.name || "Unknown"}</span>
+                      </div>
+                      {isManager && (
+                        <Button 
+                          size="icon" 
+                          variant="ghost" 
+                          className="h-5 w-5"
+                          onClick={() => handleDeleteScheduleItem(item.id)}
+                          data-testid={`button-delete-schedule-${item.id}`}
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Settings() {
   const { data: staffList, isLoading } = useStaff();
   const { canViewMoney, role: currentRole } = useCurrentStaff();
@@ -72,14 +162,25 @@ export default function Settings() {
   const { data: mowers } = useQuery<Mower[]>({ queryKey: ["/api/mowers"] });
   const { data: treatmentTypes } = useQuery<TreatmentType[]>({ queryKey: ["/api/treatment-types"] });
   const { data: programTemplates } = useQuery<ProgramTemplate[]>({ queryKey: ["/api/program-templates"] });
+  const { data: treatmentPrograms } = useQuery<TreatmentProgram[]>({ queryKey: ["/api/treatment-programs"] });
 
   const [mowerDialogOpen, setMowerDialogOpen] = useState(false);
   const [treatmentDialogOpen, setTreatmentDialogOpen] = useState(false);
+  const [editingTreatment, setEditingTreatment] = useState<TreatmentType | null>(null);
   const [programDialogOpen, setProgramDialogOpen] = useState(false);
   const [editingProgram, setEditingProgram] = useState<ProgramTemplate | null>(null);
   const [expandedProgram, setExpandedProgram] = useState<number | null>(null);
   const [addTreatmentDialogOpen, setAddTreatmentDialogOpen] = useState(false);
   const [selectedProgramForTreatment, setSelectedProgramForTreatment] = useState<number | null>(null);
+  
+  const [treatmentProgramDialogOpen, setTreatmentProgramDialogOpen] = useState(false);
+  const [editingTreatmentProgram, setEditingTreatmentProgram] = useState<TreatmentProgram | null>(null);
+  const [expandedTreatmentProgram, setExpandedTreatmentProgram] = useState<number | null>(null);
+  const [addScheduleDialogOpen, setAddScheduleDialogOpen] = useState(false);
+  const [selectedTreatmentProgramForSchedule, setSelectedTreatmentProgramForSchedule] = useState<number | null>(null);
+  const [scheduleFormTreatmentTypeId, setScheduleFormTreatmentTypeId] = useState<string>("");
+  const [scheduleFormMonth, setScheduleFormMonth] = useState<string>("");
+  const [scheduleFormInstructions, setScheduleFormInstructions] = useState<string>("");
   
   const currentYear = new Date().getFullYear();
   const [programYear, setProgramYear] = useState(currentYear);
@@ -177,23 +278,90 @@ export default function Settings() {
     }
   };
 
-  const handleCreateTreatment = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSaveTreatment = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = e.currentTarget;
     const formData = new FormData(form);
+    const data = {
+      name: String(formData.get("name") || ""),
+      category: String(formData.get("category") || "fertilizer"),
+      defaultNotes: formData.get("defaultNotes") ? String(formData.get("defaultNotes")) : null,
+    };
     try {
-      await apiRequest("POST", "/api/treatment-types", {
-        name: String(formData.get("name") || ""),
-        category: String(formData.get("category") || "fertilizer"),
-        defaultNotes: formData.get("defaultNotes") ? String(formData.get("defaultNotes")) : null,
-      });
+      if (editingTreatment) {
+        await apiRequest("PUT", `/api/treatment-types/${editingTreatment.id}`, data);
+        toast({ title: "Treatment type updated successfully" });
+      } else {
+        await apiRequest("POST", "/api/treatment-types", data);
+        toast({ title: "Treatment type added successfully" });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/treatment-types"] });
-      toast({ title: "Treatment type added successfully" });
       setTreatmentDialogOpen(false);
+      setEditingTreatment(null);
       form.reset();
     } catch (error) {
-      toast({ title: "Failed to add treatment type", variant: "destructive" });
+      toast({ title: editingTreatment ? "Failed to update treatment type" : "Failed to add treatment type", variant: "destructive" });
     }
+  };
+  
+  const openEditTreatment = (treatment: TreatmentType) => {
+    setEditingTreatment(treatment);
+    setTreatmentDialogOpen(true);
+  };
+
+  const handleSaveTreatmentProgram = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+    const data = {
+      name: String(formData.get("name") || ""),
+      description: formData.get("description") ? String(formData.get("description")) : null,
+    };
+    try {
+      if (editingTreatmentProgram) {
+        await apiRequest("PUT", `/api/treatment-programs/${editingTreatmentProgram.id}`, data);
+        toast({ title: "Treatment program updated successfully" });
+      } else {
+        await apiRequest("POST", "/api/treatment-programs", data);
+        toast({ title: "Treatment program created successfully" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/treatment-programs"] });
+      setTreatmentProgramDialogOpen(false);
+      setEditingTreatmentProgram(null);
+      form.reset();
+    } catch (error) {
+      toast({ title: editingTreatmentProgram ? "Failed to update treatment program" : "Failed to create treatment program", variant: "destructive" });
+    }
+  };
+
+  const handleAddScheduleItem = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!selectedTreatmentProgramForSchedule) return;
+    if (!scheduleFormTreatmentTypeId || !scheduleFormMonth) {
+      toast({ title: "Please select treatment type and month", variant: "destructive" });
+      return;
+    }
+    const data = {
+      treatmentTypeId: Number(scheduleFormTreatmentTypeId),
+      month: Number(scheduleFormMonth),
+      instructions: scheduleFormInstructions || null,
+    };
+    try {
+      await apiRequest("POST", `/api/treatment-programs/${selectedTreatmentProgramForSchedule}/schedule`, data);
+      toast({ title: "Treatment added to schedule" });
+      queryClient.invalidateQueries({ queryKey: ["/api/treatment-programs", selectedTreatmentProgramForSchedule] });
+      setAddScheduleDialogOpen(false);
+      setSelectedTreatmentProgramForSchedule(null);
+      setScheduleFormTreatmentTypeId("");
+      setScheduleFormMonth("");
+      setScheduleFormInstructions("");
+    } catch (error) {
+      toast({ title: "Failed to add treatment to schedule", variant: "destructive" });
+    }
+  };
+  
+  const resetTreatmentForm = () => {
+    setEditingTreatment(null);
   };
 
   const handleSaveProgram = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -499,7 +667,10 @@ export default function Settings() {
                     <CardTitle>Treatment Types</CardTitle>
                   </div>
                   {isManager && (
-                    <Dialog open={treatmentDialogOpen} onOpenChange={setTreatmentDialogOpen}>
+                    <Dialog open={treatmentDialogOpen} onOpenChange={(open) => {
+                      setTreatmentDialogOpen(open);
+                      if (!open) resetTreatmentForm();
+                    }}>
                       <DialogTrigger asChild>
                         <Button size="sm" data-testid="button-add-treatment">
                           <Plus className="w-4 h-4 mr-1" />
@@ -508,16 +679,23 @@ export default function Settings() {
                       </DialogTrigger>
                       <DialogContent>
                         <DialogHeader>
-                          <DialogTitle>Add Treatment Type</DialogTitle>
+                          <DialogTitle>{editingTreatment ? "Edit Treatment Type" : "Add Treatment Type"}</DialogTitle>
                         </DialogHeader>
-                        <form onSubmit={handleCreateTreatment} className="space-y-4">
+                        <form onSubmit={handleSaveTreatment} className="space-y-4">
                           <div className="space-y-2">
                             <Label htmlFor="treatment-name">Name</Label>
-                            <Input id="treatment-name" name="name" required data-testid="input-treatment-name" />
+                            <Input 
+                              id="treatment-name" 
+                              name="name" 
+                              required 
+                              defaultValue={editingTreatment?.name || ""}
+                              key={editingTreatment?.id || "new"}
+                              data-testid="input-treatment-name" 
+                            />
                           </div>
                           <div className="space-y-2">
                             <Label htmlFor="treatment-category">Category</Label>
-                            <Select name="category" defaultValue="fertilizer">
+                            <Select name="category" defaultValue={editingTreatment?.category || "fertilizer"} key={`cat-${editingTreatment?.id || "new"}`}>
                               <SelectTrigger data-testid="select-treatment-category">
                                 <SelectValue />
                               </SelectTrigger>
@@ -532,10 +710,16 @@ export default function Settings() {
                           </div>
                           <div className="space-y-2">
                             <Label htmlFor="treatment-notes">Default Notes</Label>
-                            <Textarea id="treatment-notes" name="defaultNotes" data-testid="input-treatment-notes" />
+                            <Textarea 
+                              id="treatment-notes" 
+                              name="defaultNotes" 
+                              defaultValue={editingTreatment?.defaultNotes || ""}
+                              key={`notes-${editingTreatment?.id || "new"}`}
+                              data-testid="input-treatment-notes" 
+                            />
                           </div>
                           <Button type="submit" className="w-full" data-testid="button-submit-treatment">
-                            Add Treatment
+                            {editingTreatment ? "Save Changes" : "Add Treatment"}
                           </Button>
                         </form>
                       </DialogContent>
@@ -563,7 +747,19 @@ export default function Settings() {
                           <p className="text-sm text-muted-foreground capitalize">{treatment.category}</p>
                         </div>
                       </div>
-                      <Badge variant="outline">{treatment.category}</Badge>
+                      <div className="flex items-center gap-2">
+                        {isManager && (
+                          <Button 
+                            size="icon" 
+                            variant="ghost" 
+                            onClick={() => openEditTreatment(treatment)}
+                            data-testid={`button-edit-treatment-${treatment.id}`}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                        )}
+                        <Badge variant="outline">{treatment.category}</Badge>
+                      </div>
                     </div>
                   ))}
                   {(!treatmentTypes || treatmentTypes.length === 0) && (
@@ -574,6 +770,179 @@ export default function Settings() {
                 </div>
               </CardContent>
             </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-5 h-5 text-primary" />
+                    <CardTitle>Treatment Programs</CardTitle>
+                  </div>
+                  {isManager && (
+                    <Dialog open={treatmentProgramDialogOpen} onOpenChange={(open) => {
+                      setTreatmentProgramDialogOpen(open);
+                      if (!open) setEditingTreatmentProgram(null);
+                    }}>
+                      <DialogTrigger asChild>
+                        <Button size="sm" data-testid="button-add-treatment-program">
+                          <Plus className="w-4 h-4 mr-1" />
+                          Add Program
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>{editingTreatmentProgram ? "Edit Treatment Program" : "Create Treatment Program"}</DialogTitle>
+                        </DialogHeader>
+                        <form onSubmit={handleSaveTreatmentProgram} className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="treatment-program-name">Name</Label>
+                            <Input 
+                              id="treatment-program-name" 
+                              name="name" 
+                              required 
+                              defaultValue={editingTreatmentProgram?.name || ""}
+                              key={editingTreatmentProgram?.id || "new"}
+                              data-testid="input-treatment-program-name" 
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="treatment-program-description">Description</Label>
+                            <Textarea 
+                              id="treatment-program-description" 
+                              name="description" 
+                              defaultValue={editingTreatmentProgram?.description || ""}
+                              key={`desc-${editingTreatmentProgram?.id || "new"}`}
+                              data-testid="input-treatment-program-description" 
+                            />
+                          </div>
+                          <Button type="submit" className="w-full" data-testid="button-submit-treatment-program">
+                            {editingTreatmentProgram ? "Save Changes" : "Create Program"}
+                          </Button>
+                        </form>
+                      </DialogContent>
+                    </Dialog>
+                  )}
+                </div>
+                <CardDescription>
+                  Define treatment schedules that specify which treatments occur in which months. Assign these to jobs to auto-populate treatment checklists.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {treatmentPrograms?.map(program => (
+                    <div
+                      key={program.id}
+                      className="rounded-lg border border-border"
+                      data-testid={`treatment-program-row-${program.id}`}
+                    >
+                      <div 
+                        className="flex items-center justify-between p-4 cursor-pointer hover-elevate rounded-lg"
+                        onClick={() => setExpandedTreatmentProgram(expandedTreatmentProgram === program.id ? null : program.id)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                            <Leaf className="w-5 h-5 text-primary" />
+                          </div>
+                          <div>
+                            <p className="font-semibold">{program.name}</p>
+                            <p className="text-sm text-muted-foreground">{program.description || "No description"}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {isManager && (
+                            <Button 
+                              size="icon" 
+                              variant="ghost" 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingTreatmentProgram(program);
+                                setTreatmentProgramDialogOpen(true);
+                              }}
+                              data-testid={`button-edit-treatment-program-${program.id}`}
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </Button>
+                          )}
+                          <Badge variant={program.isActive ? "default" : "outline"}>
+                            {program.isActive ? "Active" : "Inactive"}
+                          </Badge>
+                          {expandedTreatmentProgram === program.id ? (
+                            <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                          )}
+                        </div>
+                      </div>
+                      
+                      {expandedTreatmentProgram === program.id && (
+                        <TreatmentProgramScheduleSection
+                          programId={program.id}
+                          treatmentTypes={treatmentTypes || []}
+                          isManager={isManager}
+                          onAddSchedule={() => {
+                            setSelectedTreatmentProgramForSchedule(program.id);
+                            setAddScheduleDialogOpen(true);
+                          }}
+                        />
+                      )}
+                    </div>
+                  ))}
+                  {(!treatmentPrograms || treatmentPrograms.length === 0) && (
+                    <p className="text-center text-muted-foreground py-8">
+                      No treatment programs defined. Create one to schedule treatments across months.
+                    </p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Dialog open={addScheduleDialogOpen} onOpenChange={setAddScheduleDialogOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add Treatment to Schedule</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleAddScheduleItem} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="schedule-treatment-type">Treatment Type</Label>
+                    <Select value={scheduleFormTreatmentTypeId} onValueChange={setScheduleFormTreatmentTypeId}>
+                      <SelectTrigger data-testid="select-schedule-treatment-type">
+                        <SelectValue placeholder="Select treatment" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {treatmentTypes?.map(t => (
+                          <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="schedule-month">Month</Label>
+                    <Select value={scheduleFormMonth} onValueChange={setScheduleFormMonth}>
+                      <SelectTrigger data-testid="select-schedule-month">
+                        <SelectValue placeholder="Select month" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MONTH_NAMES.map((m, idx) => (
+                          <SelectItem key={idx + 1} value={String(idx + 1)}>{m}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="schedule-instructions">Instructions (optional)</Label>
+                    <Textarea 
+                      id="schedule-instructions" 
+                      value={scheduleFormInstructions}
+                      onChange={(e) => setScheduleFormInstructions(e.target.value)}
+                      data-testid="input-schedule-instructions" 
+                    />
+                  </div>
+                  <Button type="submit" className="w-full" data-testid="button-submit-schedule-item">
+                    Add to Schedule
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
           </TabsContent>
 
           <TabsContent value="programs" className="space-y-4">

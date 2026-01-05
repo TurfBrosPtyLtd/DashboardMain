@@ -91,7 +91,8 @@ export const jobs = pgTable("jobs", {
   assignedToId: integer("assigned_to_id").references(() => staff.id),
   billingContactId: integer("billing_contact_id"),
   clientProgramId: integer("client_program_id"), // Legacy - for client-based programs
-  programTemplateId: integer("program_template_id").references(() => programTemplates.id), // Direct link to program template
+  programTemplateId: integer("program_template_id").references(() => programTemplates.id), // Direct link to service program template
+  treatmentProgramId: integer("treatment_program_id").references(() => treatmentPrograms.id), // Link to treatment program
   scheduledDate: timestamp("scheduled_date").notNull(),
   scheduledTime: timestamp("scheduled_time"), // Optional specific time for time-sensitive jobs
   estimatedDurationMinutes: integer("estimated_duration_minutes"),
@@ -179,6 +180,25 @@ export const treatmentTypes = pgTable("treatment_types", {
   category: text("category"), // 'fertilizer', 'soil', 'pest', 'other'
   defaultNotes: text("default_notes"),
   isActive: boolean("is_active").default(true),
+});
+
+// Treatment Programs - standalone treatment schedules (separate from service programs)
+export const treatmentPrograms = pgTable("treatment_programs", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Treatment Program Schedule - which treatments happen in which months
+export const treatmentProgramSchedule = pgTable("treatment_program_schedule", {
+  id: serial("id").primaryKey(),
+  treatmentProgramId: integer("treatment_program_id").references(() => treatmentPrograms.id).notNull(),
+  treatmentTypeId: integer("treatment_type_id").references(() => treatmentTypes.id).notNull(),
+  month: integer("month").notNull(), // 1-12
+  quantity: integer("quantity").default(1),
+  instructions: text("instructions"),
 });
 
 // Program templates - reusable program definitions
@@ -409,6 +429,22 @@ export const treatmentTypesRelations = relations(treatmentTypes, ({ many }) => (
   templateTreatments: many(programTemplateTreatments),
   clientTreatments: many(clientProgramTreatments),
   jobTreatments: many(jobTreatments),
+  treatmentProgramSchedule: many(treatmentProgramSchedule),
+}));
+
+export const treatmentProgramsRelations = relations(treatmentPrograms, ({ many }) => ({
+  schedule: many(treatmentProgramSchedule),
+}));
+
+export const treatmentProgramScheduleRelations = relations(treatmentProgramSchedule, ({ one }) => ({
+  treatmentProgram: one(treatmentPrograms, {
+    fields: [treatmentProgramSchedule.treatmentProgramId],
+    references: [treatmentPrograms.id],
+  }),
+  treatmentType: one(treatmentTypes, {
+    fields: [treatmentProgramSchedule.treatmentTypeId],
+    references: [treatmentTypes.id],
+  }),
 }));
 
 export const jobTreatmentsRelations = relations(jobTreatments, ({ one }) => ({
@@ -533,6 +569,7 @@ export const insertJobSchema = createInsertSchema(jobs).omit({ id: true }).exten
   scheduledDate: z.union([z.date(), z.string().pipe(z.coerce.date())]),
   scheduledTime: z.union([z.date(), z.string().pipe(z.coerce.date())]).optional().nullable(),
   programTemplateId: z.number().optional().nullable(),
+  treatmentProgramId: z.number().optional().nullable(),
   programTier: z.string().optional().nullable(),
 });
 export const insertFeedbackSchema = createInsertSchema(feedback).omit({ id: true, createdAt: true, sentiment: true, aiAnalysis: true });
@@ -544,6 +581,8 @@ export const insertMowerSchema = createInsertSchema(mowers).omit({ id: true });
 export const insertStaffMowerFavoriteSchema = createInsertSchema(staffMowerFavorites).omit({ id: true, createdAt: true });
 export const insertJobTaskSchema = createInsertSchema(jobTasks).omit({ id: true, completedAt: true });
 export const insertTreatmentTypeSchema = createInsertSchema(treatmentTypes).omit({ id: true });
+export const insertTreatmentProgramSchema = createInsertSchema(treatmentPrograms).omit({ id: true, createdAt: true });
+export const insertTreatmentProgramScheduleSchema = createInsertSchema(treatmentProgramSchedule).omit({ id: true });
 export const insertProgramTemplateSchema = createInsertSchema(programTemplates).omit({ id: true, createdAt: true });
 export const insertProgramTemplateTreatmentSchema = createInsertSchema(programTemplateTreatments).omit({ id: true });
 export const insertClientProgramSchema = createInsertSchema(clientPrograms).omit({ id: true, createdAt: true });
@@ -584,6 +623,10 @@ export type JobTask = typeof jobTasks.$inferSelect;
 export type InsertJobTask = z.infer<typeof insertJobTaskSchema>;
 export type TreatmentType = typeof treatmentTypes.$inferSelect;
 export type InsertTreatmentType = z.infer<typeof insertTreatmentTypeSchema>;
+export type TreatmentProgram = typeof treatmentPrograms.$inferSelect;
+export type InsertTreatmentProgram = z.infer<typeof insertTreatmentProgramSchema>;
+export type TreatmentProgramSchedule = typeof treatmentProgramSchedule.$inferSelect;
+export type InsertTreatmentProgramSchedule = z.infer<typeof insertTreatmentProgramScheduleSchema>;
 export type ProgramTemplate = typeof programTemplates.$inferSelect;
 export type InsertProgramTemplate = z.infer<typeof insertProgramTemplateSchema>;
 export type ProgramTemplateTreatment = typeof programTemplateTreatments.$inferSelect;

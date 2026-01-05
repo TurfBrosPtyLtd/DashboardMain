@@ -5,7 +5,8 @@ import { api } from "@shared/routes";
 import { 
   insertJobRunSchema, insertCrewSchema, updateCrewSchema, canViewMoney, canViewGateCode,
   insertClientContactSchema, insertMowerSchema, insertJobTaskSchema,
-  insertTreatmentTypeSchema, insertProgramTemplateSchema, insertProgramTemplateTreatmentSchema,
+  insertTreatmentTypeSchema, insertTreatmentProgramSchema, insertTreatmentProgramScheduleSchema,
+  insertProgramTemplateSchema, insertProgramTemplateTreatmentSchema,
   insertClientProgramSchema, insertJobTimeEntrySchema, insertJobPhotoSchema, insertJobInvoiceItemSchema
 } from "@shared/schema";
 import { z } from "zod";
@@ -278,6 +279,11 @@ export async function registerRoutes(
         await storage.seedJobTreatmentsFromTemplate(job.id, input.programTemplateId);
       }
       
+      // Seed job treatments from treatment program if one is assigned
+      if (input.treatmentProgramId) {
+        await storage.seedJobTreatmentsFromTreatmentProgram(job.id, input.treatmentProgramId);
+      }
+      
       // Auto-schedule future jobs if a program tier is selected
       if (input.programTier && input.scheduledDate) {
         const annualServices = parseInt(input.programTier, 10);
@@ -397,10 +403,12 @@ export async function registerRoutes(
         delete input.gateCode;
       }
       
-      // Check if programTemplateId is being changed to reseed treatments
+      // Check if programTemplateId or treatmentProgramId is being changed to reseed treatments
       const existingJob = await storage.getJob(jobId);
       const templateChanged = existingJob && input.programTemplateId !== undefined && 
         input.programTemplateId !== existingJob.programTemplateId;
+      const treatmentProgramChanged = existingJob && input.treatmentProgramId !== undefined &&
+        input.treatmentProgramId !== existingJob.treatmentProgramId;
       
       const job = await storage.updateJob(jobId, input);
       
@@ -410,6 +418,11 @@ export async function registerRoutes(
         if (input.programTemplateId) {
           await storage.seedJobTreatmentsFromTemplate(jobId, input.programTemplateId);
         }
+      }
+      
+      // Seed from treatment program if changed (adds to existing treatments)
+      if (treatmentProgramChanged && input.treatmentProgramId) {
+        await storage.seedJobTreatmentsFromTreatmentProgram(jobId, input.treatmentProgramId);
       }
       
       res.json(sanitizeJobData(job, canViewPrice, canViewGate));
@@ -688,6 +701,98 @@ export async function registerRoutes(
       res.status(201).json(type);
     } catch (err) {
       res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  app.put("/api/treatment-types/:id", async (req, res) => {
+    try {
+      const role = await getCurrentUserRole(req);
+      if (role !== "manager" && role !== "owner") {
+        return res.status(403).json({ message: "Only managers and owners can update treatment types" });
+      }
+      const id = Number(req.params.id);
+      const updates = insertTreatmentTypeSchema.partial().parse(req.body);
+      const updated = await storage.updateTreatmentType(id, updates);
+      if (!updated) return res.status(404).json({ message: "Treatment type not found" });
+      res.json(updated);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  // Treatment Programs (standalone treatment schedules, separate from service programs)
+  app.get("/api/treatment-programs", async (req, res) => {
+    const programs = await storage.getTreatmentPrograms();
+    res.json(programs);
+  });
+
+  app.get("/api/treatment-programs/:id", async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const program = await storage.getTreatmentProgram(id);
+      if (!program) return res.status(404).json({ message: "Treatment program not found" });
+      res.json(program);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid treatment program ID" });
+    }
+  });
+
+  app.post("/api/treatment-programs", async (req, res) => {
+    try {
+      const role = await getCurrentUserRole(req);
+      if (role !== "manager" && role !== "owner") {
+        return res.status(403).json({ message: "Only managers and owners can create treatment programs" });
+      }
+      const input = insertTreatmentProgramSchema.parse(req.body);
+      const program = await storage.createTreatmentProgram(input);
+      res.status(201).json(program);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  app.put("/api/treatment-programs/:id", async (req, res) => {
+    try {
+      const role = await getCurrentUserRole(req);
+      if (role !== "manager" && role !== "owner") {
+        return res.status(403).json({ message: "Only managers and owners can update treatment programs" });
+      }
+      const id = Number(req.params.id);
+      const updates = insertTreatmentProgramSchema.partial().parse(req.body);
+      const updated = await storage.updateTreatmentProgram(id, updates);
+      if (!updated) return res.status(404).json({ message: "Treatment program not found" });
+      res.json(updated);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  app.post("/api/treatment-programs/:id/schedule", async (req, res) => {
+    try {
+      const role = await getCurrentUserRole(req);
+      if (role !== "manager" && role !== "owner") {
+        return res.status(403).json({ message: "Only managers and owners can add treatment schedule" });
+      }
+      const treatmentProgramId = Number(req.params.id);
+      const input = insertTreatmentProgramScheduleSchema.parse({ ...req.body, treatmentProgramId });
+      const schedule = await storage.createTreatmentProgramSchedule(input);
+      res.status(201).json(schedule);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid input" });
+    }
+  });
+
+  app.delete("/api/treatment-program-schedule/:id", async (req, res) => {
+    try {
+      const role = await getCurrentUserRole(req);
+      if (role !== "manager" && role !== "owner") {
+        return res.status(403).json({ message: "Only managers and owners can delete treatment schedule" });
+      }
+      const id = Number(req.params.id);
+      await storage.deleteTreatmentProgramSchedule(id);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(400).json({ message: "Invalid schedule ID" });
     }
   });
 

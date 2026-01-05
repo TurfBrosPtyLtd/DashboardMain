@@ -2,7 +2,8 @@ import { db } from "./db";
 import {
   staff, clients, crews, crewMembers, jobRuns, jobs, feedback, applications,
   clientContacts, mowers, staffMowerFavorites, jobTasks,
-  treatmentTypes, programTemplates, programTemplateTreatments,
+  treatmentTypes, treatmentPrograms, treatmentProgramSchedule,
+  programTemplates, programTemplateTreatments,
   clientPrograms, clientProgramServices, clientProgramTreatments,
   jobTimeEntries, jobPhotos, jobInvoiceItems,
   type Staff, type InsertStaff,
@@ -16,6 +17,8 @@ import {
   type StaffMowerFavorite, type InsertStaffMowerFavorite,
   type JobTask, type InsertJobTask,
   type TreatmentType, type InsertTreatmentType,
+  type TreatmentProgram, type InsertTreatmentProgram,
+  type TreatmentProgramSchedule, type InsertTreatmentProgramSchedule,
   type ProgramTemplate, type InsertProgramTemplate,
   type ProgramTemplateTreatment, type InsertProgramTemplateTreatment,
   type ClientProgram, type InsertClientProgram,
@@ -97,6 +100,15 @@ export interface IStorage {
   getTreatmentTypes(): Promise<TreatmentType[]>;
   createTreatmentType(type: InsertTreatmentType): Promise<TreatmentType>;
   updateTreatmentType(id: number, updates: Partial<TreatmentType>): Promise<TreatmentType | undefined>;
+
+  // Treatment Programs (standalone treatment schedules)
+  getTreatmentPrograms(): Promise<TreatmentProgram[]>;
+  getTreatmentProgram(id: number): Promise<(TreatmentProgram & { schedule: (TreatmentProgramSchedule & { treatmentType: TreatmentType })[] }) | undefined>;
+  createTreatmentProgram(program: InsertTreatmentProgram): Promise<TreatmentProgram>;
+  updateTreatmentProgram(id: number, updates: Partial<TreatmentProgram>): Promise<TreatmentProgram | undefined>;
+  createTreatmentProgramSchedule(schedule: InsertTreatmentProgramSchedule): Promise<TreatmentProgramSchedule>;
+  deleteTreatmentProgramSchedule(id: number): Promise<boolean>;
+  seedJobTreatmentsFromTreatmentProgram(jobId: number, treatmentProgramId: number): Promise<JobTreatment[]>;
 
   // Program Templates
   getProgramTemplates(): Promise<ProgramTemplate[]>;
@@ -409,6 +421,71 @@ export class DatabaseStorage implements IStorage {
   async updateTreatmentType(id: number, updates: Partial<TreatmentType>): Promise<TreatmentType | undefined> {
     const [updated] = await db.update(treatmentTypes).set(updates).where(eq(treatmentTypes.id, id)).returning();
     return updated;
+  }
+
+  // Treatment Programs
+  async getTreatmentPrograms(): Promise<TreatmentProgram[]> {
+    return await db.select().from(treatmentPrograms).where(eq(treatmentPrograms.isActive, true));
+  }
+
+  async getTreatmentProgram(id: number): Promise<(TreatmentProgram & { schedule: (TreatmentProgramSchedule & { treatmentType: TreatmentType })[] }) | undefined> {
+    return await db.query.treatmentPrograms.findFirst({
+      where: eq(treatmentPrograms.id, id),
+      with: {
+        schedule: {
+          with: { treatmentType: true }
+        }
+      }
+    });
+  }
+
+  async createTreatmentProgram(program: InsertTreatmentProgram): Promise<TreatmentProgram> {
+    const [newProgram] = await db.insert(treatmentPrograms).values(program).returning();
+    return newProgram;
+  }
+
+  async updateTreatmentProgram(id: number, updates: Partial<TreatmentProgram>): Promise<TreatmentProgram | undefined> {
+    const [updated] = await db.update(treatmentPrograms).set(updates).where(eq(treatmentPrograms.id, id)).returning();
+    return updated;
+  }
+
+  async createTreatmentProgramSchedule(schedule: InsertTreatmentProgramSchedule): Promise<TreatmentProgramSchedule> {
+    const [newSchedule] = await db.insert(treatmentProgramSchedule).values(schedule).returning();
+    return newSchedule;
+  }
+
+  async deleteTreatmentProgramSchedule(id: number): Promise<boolean> {
+    await db.delete(treatmentProgramSchedule).where(eq(treatmentProgramSchedule.id, id));
+    return true;
+  }
+
+  async seedJobTreatmentsFromTreatmentProgram(jobId: number, treatmentProgramId: number): Promise<JobTreatment[]> {
+    const job = await db.query.jobs.findFirst({
+      where: eq(jobs.id, jobId)
+    });
+    if (!job) return [];
+
+    const jobMonth = new Date(job.scheduledDate).getMonth() + 1;
+
+    const schedules = await db.query.treatmentProgramSchedule.findMany({
+      where: and(
+        eq(treatmentProgramSchedule.treatmentProgramId, treatmentProgramId),
+        eq(treatmentProgramSchedule.month, jobMonth)
+      ),
+      with: { treatmentType: true }
+    });
+
+    if (schedules.length === 0) return [];
+
+    const newTreatments: InsertJobTreatment[] = schedules.map(s => ({
+      jobId,
+      treatmentTypeId: s.treatmentTypeId,
+      status: "pending",
+      quantity: s.quantity || 1,
+      instructions: s.instructions
+    }));
+
+    return await this.createJobTreatments(newTreatments);
   }
 
   // Program Templates
